@@ -169,7 +169,7 @@ configure() {
     printf "  ${CM} ${DGN}Password set${CL}\n"
   else
     CT_SSH_ENABLE=0
-    printf "  ${INFO} ${DGN}SSH skipped — use: pct enter %s${CL}\n" "$(get_next_ctid)"
+    printf "  ${INFO} ${DGN}SSH skipped — use: pct enter <CTID>${CL}\n"
   fi
 
   printf "\n"
@@ -294,10 +294,36 @@ UNIT
       sed -i "/^#\?PasswordAuthentication/c\PasswordAuthentication yes" /etc/ssh/sshd_config
       systemctl enable --now ssh &>/dev/null || systemctl enable --now sshd &>/dev/null || true
     '
-    # Set password without exposing it on the command line
     printf 'root:%s' "${CT_ROOT_PW}" | pct exec "${CTID}" -- chpasswd
     msg_ok "SSH enabled — root login with password"
   fi
+
+  msg_info "Setting up login banner"
+  pct exec "${CTID}" -- bash -c '
+    # Clear the static Debian legal notice
+    truncate -s 0 /etc/motd
+    # Silence the default kernel version line
+    chmod -x /etc/update-motd.d/10-uname 2>/dev/null || true
+
+    cat > /etc/update-motd.d/01-tunarr <<'"'"'MOTDEOF'"'"'
+#!/usr/bin/env bash
+OS=$(. /etc/os-release && printf "%s - Version: %s" "${NAME}" "${VERSION_ID}")
+HOSTNAME=$(hostname)
+IP=$(ip -4 addr show eth0 2>/dev/null | grep -oP "(?<=inet )\S+" | cut -d/ -f1 || echo "unknown")
+SVC=$(systemctl is-active tunarr 2>/dev/null || echo unknown)
+GN="\033[1;92m"; YW="\033[33m"; DGN="\033[32m"; BL="\033[36m"; CL="\033[m"
+printf "\n"
+printf "${GN}  Tunarr LXC Container${CL}\n"
+printf "  ${BL}\xf0\x9f\x8c\x90  GitHub: https://github.com/neilmc78/Tunarr${CL}\n\n"
+printf "  ${YW}\xf0\x9f\x92\xbb  OS      :${CL} %s\n" "${OS}"
+printf "  ${YW}\xf0\x9f\x8f\xa0  Hostname:${CL} %s\n" "${HOSTNAME}"
+printf "  ${YW}\xf0\x9f\x92\xa1  IP      :${CL} %s\n" "${IP}"
+printf "  ${YW}\xf0\x9f\x8e\xb5  Service :${CL} tunarr is %s\n" "${SVC}"
+printf "\n"
+MOTDEOF
+    chmod +x /etc/update-motd.d/01-tunarr
+  '
+  msg_ok "Login banner configured"
 }
 
 # ── Post-install info ─────────────────────────────────────────────────────────
