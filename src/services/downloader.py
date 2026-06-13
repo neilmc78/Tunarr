@@ -53,9 +53,10 @@ async def search_youtube_music(query: str, limit: int = 5) -> list[dict]:
 
 
 class ProgressHook:
-    def __init__(self, queue_id: int, progress_callback):
+    def __init__(self, queue_id: int, progress_callback, loop):
         self.queue_id = queue_id
         self.callback = progress_callback
+        self.loop = loop  # captured from async context before entering thread
 
     def __call__(self, d: dict):
         if d["status"] == "downloading":
@@ -65,13 +66,13 @@ class ProgressHook:
             if self.callback:
                 asyncio.run_coroutine_threadsafe(
                     self.callback(self.queue_id, progress, "downloading", total, downloaded),
-                    asyncio.get_event_loop(),
+                    self.loop,
                 )
         elif d["status"] == "finished":
             if self.callback:
                 asyncio.run_coroutine_threadsafe(
                     self.callback(self.queue_id, 100.0, "finished", 0, 0),
-                    asyncio.get_event_loop(),
+                    self.loop,
                 )
 
 
@@ -94,9 +95,10 @@ async def download_track(
         "add_metadata": True,
     }]
 
+    loop = asyncio.get_running_loop()
     hooks = []
     if progress_callback:
-        hooks.append(ProgressHook(queue_id, progress_callback))
+        hooks.append(ProgressHook(queue_id, progress_callback, loop))
 
     ydl_opts = {
         "outtmpl": output_template,
