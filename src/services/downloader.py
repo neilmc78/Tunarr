@@ -107,8 +107,6 @@ async def download_track(
         "no_warnings": True,
         "progress_hooks": hooks,
         "noplaylist": True,
-        # tv_embedded client bypasses YouTube age-gates without cookies
-        "extractor_args": {"youtube": {"player_client": ["tv_embedded", "web"]}},
     }
 
     result: dict[str, Any] = {}
