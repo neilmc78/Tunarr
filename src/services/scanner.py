@@ -77,9 +77,15 @@ def scan_root_folder(root_path: str) -> dict:
         stats['scanned'] += 1
         db = SessionLocal()
         try:
-            if db.query(TrackFile).filter(TrackFile.path == filepath).first():
-                stats['skipped'] += 1
-                continue
+            existing_tf = db.query(TrackFile).filter(TrackFile.path == filepath).first()
+            if existing_tf:
+                # Check the referenced artist still exists; if not, the record is orphaned
+                # (left behind by a previous artist delete) — remove it and re-import.
+                if existing_tf.artist_id and db.get(Artist, existing_tf.artist_id):
+                    stats['skipped'] += 1
+                    continue
+                db.delete(existing_tf)
+                db.flush()
 
             tags = _read_tags(filepath)
             artist_name = (tags.get('artist') or '').strip()

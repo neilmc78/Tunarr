@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Artist, Album, Track, QualityProfile
+from ..models import Artist, Album, Track, QualityProfile, TrackFile
 from ..schemas import ArtistOut, ArtistIn, ArtistUpdate, ArtistLookup
 from ..services import musicbrainz as mb
 from ..services import tadb
@@ -168,6 +168,8 @@ def delete_artist(artist_id: int, deleteFiles: bool = False, db: Session = Depen
                         os.remove(track.track_file.path)
                     except OSError:
                         pass
+    # Remove TrackFile rows so the scanner can re-import these files later
+    db.query(TrackFile).filter(TrackFile.artist_id == artist_id).delete()
     db.delete(a)
     db.commit()
     return {}
