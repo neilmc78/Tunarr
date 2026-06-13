@@ -34,7 +34,7 @@ async def grab_track(body: GrabRequest, db: Session = Depends(get_db)):
 
 
 @router.get("", response_model=dict)
-def get_queue(db: Session = Depends(get_db)):
+async def get_queue(db: Session = Depends(get_db)):
     items = db.query(DownloadQueue).filter(
         DownloadQueue.status.notin_(["completed"])
     ).order_by(DownloadQueue.added.desc()).all()

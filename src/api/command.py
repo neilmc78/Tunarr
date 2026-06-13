@@ -14,6 +14,14 @@ router = APIRouter(prefix="/api/v3/command", tags=["command"])
 
 _command_store: dict[int, dict] = {}
 _cmd_counter = 0
+_search_semaphore: asyncio.Semaphore | None = None
+
+
+def _get_search_semaphore() -> asyncio.Semaphore:
+    global _search_semaphore
+    if _search_semaphore is None:
+        _search_semaphore = asyncio.Semaphore(5)
+    return _search_semaphore
 
 
 def _new_command(name: str) -> dict:
@@ -33,43 +41,44 @@ def _new_command(name: str) -> dict:
 
 
 async def _search_and_grab_track(track_id: int):
-    db: Session = SessionLocal()
-    try:
-        track = db.get(Track, track_id)
-        if not track or track.has_file:
-            return
-        album = db.get(Album, track.album_id)
-        artist = db.get(Artist, track.artist_id)
-        if not artist:
-            return
+    async with _get_search_semaphore():
+        db: Session = SessionLocal()
+        try:
+            track = db.get(Track, track_id)
+            if not track or track.has_file:
+                return
+            album = db.get(Album, track.album_id)
+            artist = db.get(Artist, track.artist_id)
+            if not artist:
+                return
 
-        query = f"{artist.name} {track.title}"
-        if album:
-            query = f"{artist.name} - {track.title} {album.title}"
+            query = f"{artist.name} {track.title}"
+            if album:
+                query = f"{artist.name} - {track.title} {album.title}"
 
-        results = await search_youtube_music(query, limit=3)
-        if not results:
-            return
+            results = await search_youtube_music(query, limit=3)
+            if not results:
+                return
 
-        best = results[0]
-        expected_ms = track.duration or 0
-        if expected_ms > 0:
-            for r in results:
-                diff = abs((r.get("duration") or 0) - expected_ms)
-                best_diff = abs((best.get("duration") or 0) - expected_ms)
-                if diff < best_diff:
-                    best = r
+            best = results[0]
+            expected_ms = track.duration or 0
+            if expected_ms > 0:
+                for r in results:
+                    diff = abs((r.get("duration") or 0) - expected_ms)
+                    best_diff = abs((best.get("duration") or 0) - expected_ms)
+                    if diff < best_diff:
+                        best = r
 
-        source_title = f"{artist.name} - {track.title}"
-        await enqueue_track_download(
-            db=db,
-            track_id=track_id,
-            source_url=best["url"],
-            source_title=source_title,
-            protocol="ytdlp",
-        )
-    finally:
-        db.close()
+            source_title = f"{artist.name} - {track.title}"
+            await enqueue_track_download(
+                db=db,
+                track_id=track_id,
+                source_url=best["url"],
+                source_title=source_title,
+                protocol="ytdlp",
+            )
+        finally:
+            db.close()
 
 
 async def _run_command(cmd: dict, body: CommandIn):
