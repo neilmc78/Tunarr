@@ -39,6 +39,10 @@ CT_NET_GW=""              # only needed for static IP
 CT_DNS="1.1.1.1"
 CT_STORAGE="local-lvm"    # override with your preferred storage
 
+# SSH / credentials (set during configure)
+CT_SSH_ENABLE=0
+CT_ROOT_PW=""
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 catch_error() {
   printf "\n${RD}[ERROR]${CL} Install failed at line %s. Check output above.\n" "$1"
@@ -64,18 +68,16 @@ msg_ok()    { printf "${BFR} ${CM} ${DGN}%s${CL}\n"    "$1"; }
 msg_error() { printf "${BFR} ${CROSS} ${RD}%s${CL}\n"  "$1"; }
 
 ask() {
-  # ask VAR "Prompt" "default"
   local var=$1 prompt=$2 default=$3
   read -rp "  ${BL}${prompt}${CL} [${DGN}${default}${CL}]: " input
   eval "${var}=\"${input:-$default}\""
 }
 
 ask_yn() {
-  # ask_yn "Prompt" default(y|n)  →  returns 0=yes 1=no
   local prompt=$1 default=${2:-n}
   read -rp "  ${BL}${prompt}${CL} [${DGN}${default}${CL}]: " input
   input=${input:-$default}
-  [[  "${input,,}" =~ ^y ]]
+  [[ "${input,,}" =~ ^y ]]
 }
 
 # ── Pre-flight checks ─────────────────────────────────────────────────────────
@@ -135,18 +137,40 @@ get_template() {
 configure() {
   printf "\n${BL}Container settings (press Enter to accept defaults):${CL}\n\n"
 
-  ask CT_HOSTNAME   "Hostname"             "${CT_HOSTNAME}"
-  ask CTID          "Container ID"         "$(get_next_ctid)"
-  ask CT_CPU        "CPU cores"            "${CT_CPU}"
-  ask CT_RAM        "RAM (MB)"             "${CT_RAM}"
-  ask CT_DISK       "Disk size (GB)"       "${CT_DISK}"
-  ask CT_STORAGE    "Storage pool"        "${CT_STORAGE}"
-  ask CT_NET_BRIDGE "Network bridge"       "${CT_NET_BRIDGE}"
-  ask CT_NET_IP     "IP (dhcp or x.x.x.x/nn)" "${CT_NET_IP}"
+  ask CT_HOSTNAME   "Hostname"                           "${CT_HOSTNAME}"
+  ask CTID          "Container ID"                       "$(get_next_ctid)"
+  ask CT_CPU        "CPU cores"                          "${CT_CPU}"
+  ask CT_RAM        "RAM (MB)"                           "${CT_RAM}"
+  ask CT_DISK       "Disk size (GB)"                     "${CT_DISK}"
+  ask CT_STORAGE    "Storage pool"                       "${CT_STORAGE}"
+  ask CT_NET_BRIDGE "Network bridge"                     "${CT_NET_BRIDGE}"
+  ask CT_NET_IP     "IP (dhcp or x.x.x.x/nn)"           "${CT_NET_IP}"
   if [[ "${CT_NET_IP}" != "dhcp" ]]; then
-    ask CT_NET_GW   "Gateway"              "${CT_NET_GW}"
+    ask CT_NET_GW   "Gateway"                            "${CT_NET_GW}"
   fi
-  ask APP_MUSIC     "Music library path on host (bind-mount into CT)" "${APP_MUSIC}"
+  ask APP_MUSIC     "Music library path on host"         "${APP_MUSIC}"
+
+  printf "\n${BL}SSH access:${CL}\n\n"
+  if ask_yn "Enable SSH (allows remote login to container)?" "y"; then
+    CT_SSH_ENABLE=1
+    while true; do
+      read -rsp "  ${BL}Root password:${CL} " CT_ROOT_PW; printf "\n"
+      if [[ -z "${CT_ROOT_PW}" ]]; then
+        printf "  ${CROSS} ${RD}Password cannot be empty.${CL}\n"
+        continue
+      fi
+      read -rsp "  ${BL}Confirm password:${CL} " _pw2; printf "\n"
+      if [[ "${CT_ROOT_PW}" != "${_pw2}" ]]; then
+        printf "  ${CROSS} ${RD}Passwords do not match — try again.${CL}\n"
+        continue
+      fi
+      break
+    done
+    printf "  ${CM} ${DGN}Password set${CL}\n"
+  else
+    CT_SSH_ENABLE=0
+    printf "  ${INFO} ${DGN}SSH skipped — use: pct enter %s${CL}\n" "$(get_next_ctid)"
+  fi
 
   printf "\n"
   printf "  ${INFO} Summary:\n"
@@ -156,6 +180,11 @@ configure() {
   printf "  ${TAB}Disk        : ${GN}%s GB on %s${CL}\n"  "${CT_DISK}" "${CT_STORAGE}"
   printf "  ${TAB}Network     : ${GN}%s / %s${CL}\n"  "${CT_NET_BRIDGE}" "${CT_NET_IP}"
   printf "  ${TAB}Music path  : ${GN}%s${CL}\n"  "${APP_MUSIC}"
+  if [[ "${CT_SSH_ENABLE}" == "1" ]]; then
+    printf "  ${TAB}SSH         : ${GN}enabled (root login)${CL}\n"
+  else
+    printf "  ${TAB}SSH         : ${DGN}disabled${CL}\n"
+  fi
   printf "\n"
 
   if ! ask_yn "Proceed with install?" "y"; then
@@ -191,7 +220,6 @@ create_container() {
     --start      0 \
     &>/dev/null
 
-  # Bind-mount music library (read-write so Tunarr can write files)
   if [[ -n "${APP_MUSIC}" ]]; then
     mkdir -p "${APP_MUSIC}"
     pct set "${CTID}" --mp0 "${APP_MUSIC},mp=/mnt/music" &>/dev/null
@@ -201,20 +229,19 @@ create_container() {
 
   msg_info "Starting container"
   pct start "${CTID}" &>/dev/null
-  sleep 3   # give networking a moment
+  sleep 3
   msg_ok "Container started"
 }
 
 # ── Run install inside container ──────────────────────────────────────────────
 install_tunarr() {
   msg_info "Installing dependencies (this takes a minute)"
-
   pct exec "${CTID}" -- bash -c '
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
     apt-get install -y -qq \
       curl git ffmpeg python3 python3-pip python3-venv \
-      ca-certificates locales &>/dev/null
+      ca-certificates locales openssh-server &>/dev/null
   ' &>/dev/null
   msg_ok "System packages installed"
 
@@ -259,11 +286,22 @@ UNIT
     systemctl enable --now ${APP_SERVICE} &>/dev/null
   "
   msg_ok "Tunarr service enabled and started"
+
+  if [[ "${CT_SSH_ENABLE}" == "1" ]]; then
+    msg_info "Configuring SSH access"
+    pct exec "${CTID}" -- bash -c '
+      sed -i "/^#\?PermitRootLogin/c\PermitRootLogin yes" /etc/ssh/sshd_config
+      sed -i "/^#\?PasswordAuthentication/c\PasswordAuthentication yes" /etc/ssh/sshd_config
+      systemctl enable --now ssh &>/dev/null || systemctl enable --now sshd &>/dev/null || true
+    '
+    # Set password without exposing it on the command line
+    printf 'root:%s' "${CT_ROOT_PW}" | pct exec "${CTID}" -- chpasswd
+    msg_ok "SSH enabled — root login with password"
+  fi
 }
 
 # ── Post-install info ─────────────────────────────────────────────────────────
 print_completion() {
-  # Grab actual IP from inside the container
   local ip
   ip=$(pct exec "${CTID}" -- bash -c \
     "ip -4 addr show eth0 | grep -oP '(?<=inet )\\S+' | cut -d/ -f1" 2>/dev/null || true)
@@ -271,16 +309,19 @@ print_completion() {
 
   printf "\n${GN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CL}\n"
   printf "  ${CM} ${GN}Tunarr installed successfully!${CL}\n\n"
-  printf "  ${INFO} ${YW}Web UI :${CL}  ${BGN}http://%s:%s${CL}\n"  "${ip}" "${APP_PORT}"
-  printf "  ${INFO} ${YW}CT ID  :${CL}  %s\n"  "${CTID}"
-  printf "  ${INFO} ${YW}Music  :${CL}  %s (→ /mnt/music inside CT)\n" "${APP_MUSIC}"
-  printf "  ${INFO} ${YW}Config :${CL}  %s (inside CT)\n" "${APP_DATA}"
+  printf "  ${INFO} ${YW}Web UI :${CL}  ${BGN}http://%s:%s${CL}\n"       "${ip}" "${APP_PORT}"
+  printf "  ${INFO} ${YW}CT ID  :${CL}  %s\n"                             "${CTID}"
+  printf "  ${INFO} ${YW}Music  :${CL}  %s (→ /mnt/music inside CT)\n"   "${APP_MUSIC}"
+  printf "  ${INFO} ${YW}Config :${CL}  %s (inside CT)\n"                "${APP_DATA}"
+  if [[ "${CT_SSH_ENABLE}" == "1" ]]; then
+    printf "  ${INFO} ${YW}SSH    :${CL}  ssh root@%s\n"                  "${ip}"
+  fi
   printf "\n  ${YW}First steps:${CL}\n"
-  printf "  ${TAB}1. Open http://%s:%s\n"  "${ip}" "${APP_PORT}"
+  printf "  ${TAB}1. Open http://%s:%s\n"            "${ip}" "${APP_PORT}"
   printf "  ${TAB}2. Settings → Add Root Folder → /mnt/music\n"
   printf "  ${TAB}3. Artists → Add Artist\n"
-  printf "\n  ${DGN}Logs:${CL}  pct exec %s -- journalctl -u tunarr -f\n" "${CTID}"
-  printf "  ${DGN}Shell:${CL} pct enter %s\n" "${CTID}"
+  printf "\n  ${DGN}Logs :${CL}  pct exec %s -- journalctl -u tunarr -f\n" "${CTID}"
+  printf "  ${DGN}Shell:${CL}  pct enter %s\n"                            "${CTID}"
   printf "${GN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CL}\n\n"
 }
 
