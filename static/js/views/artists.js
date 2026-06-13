@@ -1,13 +1,81 @@
+let _selectMode = false;
+const _selectedIds = new Set();
+
 function renderArtistsView(container) {
   container.innerHTML = `
     <div class="page-header">
       <h1 class="page-title">Artists</h1>
-      <button class="btn btn-primary" id="btn-add-artist">+ Add Artist</button>
+      <div class="artists-hdr-btns" id="artists-hdr-btns"></div>
     </div>
     <div id="artist-grid-wrap"><div class="loading-center"><div class="spinner"></div></div></div>
   `;
-  document.getElementById('btn-add-artist').addEventListener('click', openAddArtistModal);
+  _selectMode = false;
+  _selectedIds.clear();
+  _renderHdrBtns();
   loadArtists();
+}
+
+function _renderHdrBtns() {
+  const wrap = document.getElementById('artists-hdr-btns');
+  if (!wrap) return;
+  if (_selectMode) {
+    const n = _selectedIds.size;
+    wrap.innerHTML = `
+      <button class="btn btn-primary" id="btn-add-artist">+ Add Artist</button>
+      ${n > 0 ? `<button class="btn btn-danger" id="btn-delete-sel">Delete (${n})</button>` : ''}
+      <button class="btn btn-secondary" id="btn-sel-all">Select All</button>
+      <button class="btn btn-secondary" id="btn-sel-done">Done</button>
+    `;
+    document.getElementById('btn-add-artist').addEventListener('click', openAddArtistModal);
+    if (n > 0) document.getElementById('btn-delete-sel').addEventListener('click', deleteSelectedArtists);
+    document.getElementById('btn-sel-all').addEventListener('click', selectAllArtists);
+    document.getElementById('btn-sel-done').addEventListener('click', exitSelectMode);
+  } else {
+    wrap.innerHTML = `
+      <button class="btn btn-primary" id="btn-add-artist">+ Add Artist</button>
+      <button class="btn btn-secondary" id="btn-select-mode">Select</button>
+    `;
+    document.getElementById('btn-add-artist').addEventListener('click', openAddArtistModal);
+    document.getElementById('btn-select-mode').addEventListener('click', enterSelectMode);
+  }
+}
+
+function enterSelectMode() {
+  _selectMode = true;
+  _selectedIds.clear();
+  document.querySelector('.artist-grid')?.classList.add('select-mode');
+  _renderHdrBtns();
+}
+
+function exitSelectMode() {
+  _selectMode = false;
+  _selectedIds.clear();
+  document.querySelectorAll('.artist-card.selected').forEach(c => c.classList.remove('selected'));
+  document.querySelector('.artist-grid')?.classList.remove('select-mode');
+  _renderHdrBtns();
+}
+
+function selectAllArtists() {
+  document.querySelectorAll('.artist-card').forEach(card => {
+    const id = parseInt(card.dataset.artistId, 10);
+    _selectedIds.add(id);
+    card.classList.add('selected');
+  });
+  _renderHdrBtns();
+}
+
+async function deleteSelectedArtists() {
+  const ids = [..._selectedIds];
+  if (!ids.length) return;
+  if (!confirm(`Remove ${ids.length} artist${ids.length > 1 ? 's' : ''} from Tunarr?\n\nFiles on disk will NOT be deleted.`)) return;
+  try {
+    await Promise.all(ids.map(id => API.deleteArtist(id, false)));
+    toast(`${ids.length} artist${ids.length > 1 ? 's' : ''} removed`, 'success');
+    exitSelectMode();
+    loadArtists();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
 }
 
 async function loadArtists() {
@@ -20,7 +88,7 @@ async function loadArtists() {
       return;
     }
     const grid = document.createElement('div');
-    grid.className = 'artist-grid';
+    grid.className = 'artist-grid' + (_selectMode ? ' select-mode' : '');
     artists.forEach(a => grid.appendChild(buildArtistCard(a)));
     wrap.innerHTML = '';
     wrap.appendChild(grid);
@@ -32,33 +100,58 @@ async function loadArtists() {
 function buildArtistCard(artist) {
   const card = document.createElement('div');
   card.className = 'artist-card';
-  const stats = artist.statistics || {};
-  const pct = Math.round(stats.percentOfTracks || 0);
+  card.dataset.artistId = artist.id;
+  if (_selectedIds.has(artist.id)) card.classList.add('selected');
+
+  const stats  = artist.statistics || {};
+  const pct    = Math.round(stats.percentOfTracks || 0);
   const imgUrl = (artist.images || []).find(i => i.coverType === 'poster' || i.coverType === 'cover')?.remoteUrl;
+
   card.innerHTML = `
-    <button class="artist-card-delete" title="Remove artist" data-artist-id="${artist.id}" data-artist-name="${esc(artist.artistName)}">&times;</button>
-    <div class="artist-card-art">${imgUrl ? `<img src="${imgUrl}" alt="${esc(artist.artistName)}" loading="lazy" onerror="this.style.display='none'" />` : '🎤'}</div>
+    <div class="artist-card-art">
+      ${imgUrl
+        ? `<img src="${imgUrl}" alt="${esc(artist.artistName)}" loading="lazy" onerror="this.style.display='none'" />`
+        : `<span class="artist-card-placeholder">🎤</span>`}
+    </div>
     <div class="artist-card-info">
       <div class="artist-card-name" title="${esc(artist.artistName)}">${esc(artist.artistName)}</div>
       <div class="artist-card-meta">${stats.albumCount || 0} albums · ${stats.trackFileCount || 0}/${stats.totalTrackCount || 0} tracks</div>
       <div class="progress-wrap"><div class="progress-bar" style="width:${pct}%"></div></div>
     </div>
   `;
-  card.querySelector('.artist-card-delete').addEventListener('click', e => {
-    e.stopPropagation();
-    confirmDeleteArtistCard(artist.id, artist.artistName);
-  });
-  card.addEventListener('click', () => navigate(`/artist/${artist.id}`));
-  return card;
-}
 
-async function confirmDeleteArtistCard(id, name) {
-  if (!confirm(`Remove "${name}" from Tunarr?\n\nFiles on disk will NOT be deleted.`)) return;
-  try {
-    await API.deleteArtist(id, false);
-    toast(`${name} removed`, 'success');
-    loadArtists();
-  } catch (e) { toast(e.message, 'error'); }
+  // Lazy-fetch image from TheAudioDB if not already cached
+  if (!imgUrl) {
+    API.getArtistImage(artist.id).then(data => {
+      if (!data?.url) return;
+      const artDiv     = card.querySelector('.artist-card-art');
+      const placeholder = artDiv.querySelector('.artist-card-placeholder');
+      if (!placeholder) return;
+      const img = document.createElement('img');
+      img.src     = data.url;
+      img.alt     = artist.artistName;
+      img.loading = 'lazy';
+      img.onerror = () => img.style.display = 'none';
+      artDiv.replaceChild(img, placeholder);
+    }).catch(() => {});
+  }
+
+  card.addEventListener('click', () => {
+    if (_selectMode) {
+      if (_selectedIds.has(artist.id)) {
+        _selectedIds.delete(artist.id);
+        card.classList.remove('selected');
+      } else {
+        _selectedIds.add(artist.id);
+        card.classList.add('selected');
+      }
+      _renderHdrBtns();
+    } else {
+      navigate(`/artist/${artist.id}`);
+    }
+  });
+
+  return card;
 }
 
 function openAddArtistModal() {

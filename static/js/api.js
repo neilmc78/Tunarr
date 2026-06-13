@@ -24,6 +24,7 @@ const API = (() => {
     addArtist:       (body)  => API.post('/api/v3/artist', body),
     updateArtist:    (id, b) => API.put(`/api/v3/artist/${id}`, b),
     deleteArtist:    (id, df)=> API.delete(`/api/v3/artist/${id}?deleteFiles=${!!df}`),
+    getArtistImage:  (id)    => API.get(`/api/v3/artist/${id}/image`),
 
     getAlbums:       (artistId) => API.get(`/api/v3/album?artistId=${artistId}`),
     getAlbum:        (id)       => API.get(`/api/v3/album/${id}`),
