@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/v3/wanted", tags=["wanted"])
 @router.get("/missing", response_model=dict)
 def wanted_missing(
     page: int = Query(1, ge=1),
-    pageSize: int = Query(25, ge=1, le=200),
+    pageSize: int = Query(25, ge=1, le=2000),
     q: str = Query("", description="Filter by track title, album, or artist"),
     db: Session = Depends(get_db),
 ):
