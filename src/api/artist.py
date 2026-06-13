@@ -26,6 +26,7 @@ def get_artist(artist_id: int, db: Session = Depends(get_db)):
 
 @router.post("", response_model=ArtistOut, status_code=201)
 async def add_artist(body: ArtistIn, db: Session = Depends(get_db)):
+    # Exact MBID match — already added with real data
     existing = db.query(Artist).filter(Artist.musicbrainz_id == body.musicBrainzId).first()
     if existing:
         raise HTTPException(400, "Artist already added")
@@ -40,42 +41,88 @@ async def add_artist(body: ArtistIn, db: Session = Depends(get_db)):
         qp = db.query(QualityProfile).first()
         qp_id = qp.id if qp else None
 
-    artist = Artist(
-        musicbrainz_id=body.musicBrainzId,
-        name=mb_data.get("artistName") or body.artistName,
-        sort_name=mb_data.get("sortName") or body.artistName,
-        disambiguation=mb_data.get("disambiguation", ""),
-        overview=mb_data.get("overview", ""),
-        status=mb_data.get("status", "active"),
-        artist_type=mb_data.get("artistType", ""),
-        monitored=body.monitored,
-        album_folder=body.albumFolder,
-        root_folder_path=body.rootFolderPath,
-        quality_profile_id=qp_id,
-        images=json.dumps(mb_data.get("images", [])),
-        links=json.dumps(mb_data.get("links", [])),
-        genres=json.dumps(mb_data.get("genres", [])),
-        tags=json.dumps([]),
-    )
-    db.add(artist)
-    db.flush()
+    real_name = mb_data.get("artistName") or body.artistName
 
-    add_all_albums = body.addOptions.get("addType", "manual") == "automatic"
-    for rg in mb_data.get("releaseGroups", []):
-        album = Album(
-            musicbrainz_id=rg["musicBrainzId"],
-            artist_id=artist.id,
-            title=rg["title"],
-            album_type=rg.get("albumType", "Album"),
-            secondary_types=json.dumps(rg.get("secondaryTypes", [])),
-            release_date=rg.get("releaseDate", ""),
-            monitored=body.monitored and add_all_albums,
-            images=json.dumps([]),
-            links=json.dumps([]),
-            genres=json.dumps([]),
-            labels=json.dumps([]),
+    # Check for a scan stub with the same name (has a random UUID as MBID)
+    stub = db.query(Artist).filter(Artist.name.ilike(real_name)).first()
+
+    if stub:
+        # Merge: promote the stub to a fully enriched artist
+        stub.musicbrainz_id   = body.musicBrainzId
+        stub.name             = real_name
+        stub.sort_name        = mb_data.get("sortName") or stub.sort_name
+        stub.disambiguation   = mb_data.get("disambiguation", "")
+        stub.overview         = mb_data.get("overview", "")
+        stub.status           = mb_data.get("status", stub.status)
+        stub.artist_type      = mb_data.get("artistType", "")
+        stub.monitored        = body.monitored
+        stub.album_folder     = body.albumFolder
+        stub.root_folder_path = body.rootFolderPath or stub.root_folder_path
+        stub.quality_profile_id = qp_id
+        stub.images           = json.dumps(mb_data.get("images", []))
+        stub.links            = json.dumps(mb_data.get("links", []))
+        stub.genres           = json.dumps(mb_data.get("genres", []))
+        artist = stub
+    else:
+        artist = Artist(
+            musicbrainz_id=body.musicBrainzId,
+            name=real_name,
+            sort_name=mb_data.get("sortName") or body.artistName,
+            disambiguation=mb_data.get("disambiguation", ""),
+            overview=mb_data.get("overview", ""),
+            status=mb_data.get("status", "active"),
+            artist_type=mb_data.get("artistType", ""),
+            monitored=body.monitored,
+            album_folder=body.albumFolder,
+            root_folder_path=body.rootFolderPath,
+            quality_profile_id=qp_id,
+            images=json.dumps(mb_data.get("images", [])),
+            links=json.dumps(mb_data.get("links", [])),
+            genres=json.dumps(mb_data.get("genres", [])),
+            tags=json.dumps([]),
         )
-        db.add(album)
+        db.add(artist)
+        db.flush()
+
+    # Merge albums: match by MBID first, then by title (for scan stubs)
+    existing_by_mbid  = {al.musicbrainz_id: al for al in artist.albums}
+    existing_by_title = {al.title.lower(): al  for al in artist.albums}
+
+    add_all = body.addOptions.get("addType", "manual") == "automatic"
+
+    for rg in mb_data.get("releaseGroups", []):
+        real_mbid = rg["musicBrainzId"]
+        title     = rg["title"]
+
+        if real_mbid in existing_by_mbid:
+            # Already has the correct MBID — just refresh metadata
+            al = existing_by_mbid[real_mbid]
+            al.album_type   = rg.get("albumType", al.album_type)
+            al.release_date = rg.get("releaseDate", al.release_date)
+            continue
+
+        stub_al = existing_by_title.get(title.lower())
+        if stub_al:
+            # Scan stub found by title — give it the real MBID and update metadata
+            stub_al.musicbrainz_id = real_mbid
+            stub_al.album_type     = rg.get("albumType", stub_al.album_type)
+            stub_al.release_date   = rg.get("releaseDate", stub_al.release_date)
+            existing_by_mbid[real_mbid] = stub_al  # prevent duplicate on later iteration
+        else:
+            # Genuinely new album from MusicBrainz discography
+            db.add(Album(
+                musicbrainz_id=real_mbid,
+                artist_id=artist.id,
+                title=title,
+                album_type=rg.get("albumType", "Album"),
+                secondary_types=json.dumps(rg.get("secondaryTypes", [])),
+                release_date=rg.get("releaseDate", ""),
+                monitored=body.monitored and add_all,
+                images=json.dumps([]),
+                links=json.dumps([]),
+                genres=json.dumps([]),
+                labels=json.dumps([]),
+            ))
 
     db.commit()
     db.refresh(artist)

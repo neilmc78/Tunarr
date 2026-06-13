@@ -118,8 +118,8 @@ async def _run_command(cmd: dict, body: CommandIn):
         elif name == "RefreshArtist":
             if not body.artistId:
                 raise ValueError("artistId required for RefreshArtist")
-            from ..services import musicbrainz as mb
-            import json
+            import json as _json
+            from ..services import musicbrainz as mb_svc
 
             db: Session = SessionLocal()
             try:
@@ -127,32 +127,46 @@ async def _run_command(cmd: dict, body: CommandIn):
                 if not artist:
                     raise ValueError(f"Artist {body.artistId} not found")
 
-                mb_data = await mb.get_artist(artist.musicbrainz_id)
-                artist.name = mb_data.get("artistName", artist.name)
+                mb_data = await mb_svc.get_artist(artist.musicbrainz_id)
+                artist.name      = mb_data.get("artistName", artist.name)
                 artist.sort_name = mb_data.get("sortName", artist.sort_name)
-                artist.status = mb_data.get("status", artist.status)
-                artist.overview = mb_data.get("overview", artist.overview)
-                artist.images = json.dumps(mb_data.get("images", []))
-                artist.links = json.dumps(mb_data.get("links", []))
-                artist.genres = json.dumps(mb_data.get("genres", []))
+                artist.status    = mb_data.get("status", artist.status)
+                artist.overview  = mb_data.get("overview", artist.overview)
+                artist.images    = _json.dumps(mb_data.get("images", []))
+                artist.links     = _json.dumps(mb_data.get("links", []))
+                artist.genres    = _json.dumps(mb_data.get("genres", []))
 
-                existing_album_mbids = {al.musicbrainz_id for al in artist.albums}
+                # Match by MBID first, then by title to avoid duplicating scan stubs
+                existing_by_mbid  = {al.musicbrainz_id: al for al in artist.albums}
+                existing_by_title = {al.title.lower(): al  for al in artist.albums}
+
                 for rg in mb_data.get("releaseGroups", []):
-                    if rg["musicBrainzId"] not in existing_album_mbids:
-                        new_album = Album(
-                            musicbrainz_id=rg["musicBrainzId"],
+                    real_mbid = rg["musicBrainzId"]
+                    title     = rg["title"]
+
+                    if real_mbid in existing_by_mbid:
+                        continue
+
+                    stub = existing_by_title.get(title.lower())
+                    if stub:
+                        stub.musicbrainz_id = real_mbid
+                        stub.album_type     = rg.get("albumType", stub.album_type)
+                        stub.release_date   = rg.get("releaseDate", stub.release_date)
+                        existing_by_mbid[real_mbid] = stub
+                    else:
+                        db.add(Album(
+                            musicbrainz_id=real_mbid,
                             artist_id=artist.id,
-                            title=rg["title"],
+                            title=title,
                             album_type=rg.get("albumType", "Album"),
-                            secondary_types=json.dumps(rg.get("secondaryTypes", [])),
+                            secondary_types=_json.dumps(rg.get("secondaryTypes", [])),
                             release_date=rg.get("releaseDate", ""),
                             monitored=artist.monitored,
-                            images=json.dumps([]),
-                            links=json.dumps([]),
-                            genres=json.dumps([]),
-                            labels=json.dumps([]),
-                        )
-                        db.add(new_album)
+                            images=_json.dumps([]),
+                            links=_json.dumps([]),
+                            genres=_json.dumps([]),
+                            labels=_json.dumps([]),
+                        ))
 
                 db.commit()
                 cmd["message"] = f"Refreshed {artist.name}"
@@ -165,8 +179,7 @@ async def _run_command(cmd: dict, body: CommandIn):
 
             db: Session = SessionLocal()
             try:
-                folders = db.query(RootFolder).all()
-                paths = [f.path for f in folders]
+                paths = [f.path for f in db.query(RootFolder).all()]
             finally:
                 db.close()
 

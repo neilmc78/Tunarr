@@ -56,30 +56,51 @@ async def refresh_album_tracks(album_id: int, db: Session = Depends(get_db)):
         raise HTTPException(502, f"MusicBrainz lookup failed: {e}")
 
     al.overview = mb_data.get("overview", al.overview)
-    al.images = json.dumps(mb_data.get("images", []))
-    al.links = json.dumps(mb_data.get("links", []))
-    al.genres = json.dumps(mb_data.get("genres", []))
+    al.images   = json.dumps(mb_data.get("images", []))
+    al.links    = json.dumps(mb_data.get("links", []))
+    al.genres   = json.dumps(mb_data.get("genres", []))
     if mb_data.get("releaseDate"):
         al.release_date = mb_data["releaseDate"]
 
-    existing_mbids = {t.musicbrainz_id for t in al.tracks if t.musicbrainz_id}
+    # Match by MBID first, then by title (catches scan stubs with fake UUIDs)
+    existing_by_mbid  = {t.musicbrainz_id: t for t in al.tracks if t.musicbrainz_id}
+    existing_by_title = {t.title.lower(): t for t in al.tracks}
 
     for t_data in mb_data.get("tracks", []):
-        if t_data["musicBrainzId"] in existing_mbids:
+        real_mbid = t_data["musicBrainzId"]
+
+        if real_mbid in existing_by_mbid:
+            # Already matched — update number/duration from authoritative source
+            t = existing_by_mbid[real_mbid]
+            t.track_number          = t_data["trackNumber"]
+            t.absolute_track_number = t_data["absoluteTrackNumber"]
+            t.disc_number           = t_data["discNumber"]
+            t.duration              = t_data.get("duration") or t.duration
             continue
-        track = Track(
-            musicbrainz_id=t_data["musicBrainzId"],
-            album_id=al.id,
-            artist_id=al.artist_id,
-            title=t_data["title"],
-            track_number=t_data["trackNumber"],
-            absolute_track_number=t_data["absoluteTrackNumber"],
-            disc_number=t_data["discNumber"],
-            duration=t_data.get("duration", 0),
-            explicit=t_data.get("explicit", False),
-            monitored=al.monitored,
-        )
-        db.add(track)
+
+        stub = existing_by_title.get(t_data["title"].lower())
+        if stub:
+            # Scan stub — give it the real MBID and correct metadata
+            stub.musicbrainz_id         = real_mbid
+            stub.track_number           = t_data["trackNumber"]
+            stub.absolute_track_number  = t_data["absoluteTrackNumber"]
+            stub.disc_number            = t_data["discNumber"]
+            stub.duration               = t_data.get("duration") or stub.duration
+            existing_by_mbid[real_mbid] = stub  # prevent double-processing
+        else:
+            # Missing track — create it
+            db.add(Track(
+                musicbrainz_id=real_mbid,
+                album_id=al.id,
+                artist_id=al.artist_id,
+                title=t_data["title"],
+                track_number=t_data["trackNumber"],
+                absolute_track_number=t_data["absoluteTrackNumber"],
+                disc_number=t_data["discNumber"],
+                duration=t_data.get("duration", 0),
+                explicit=t_data.get("explicit", False),
+                monitored=al.monitored,
+            ))
 
     db.commit()
     db.refresh(al)
