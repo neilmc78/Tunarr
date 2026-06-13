@@ -21,7 +21,7 @@ QUALITY_TO_FORMAT = {
 
 
 async def search_youtube_music(query: str, limit: int = 5) -> list[dict]:
-    search_query = f"ytmsearch{limit}:{query}"
+    search_query = f"ytsearch{limit}:{query}"
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
