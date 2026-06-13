@@ -90,8 +90,6 @@ async def download_track(
         "preferredcodec": audio_format,
         "preferredquality": audio_quality,
     }, {
-        "key": "EmbedThumbnail",
-    }, {
         "key": "FFmpegMetadata",
         "add_metadata": True,
     }]
@@ -101,12 +99,12 @@ async def download_track(
         hooks.append(ProgressHook(queue_id, progress_callback))
 
     ydl_opts = {
-        "format": "bestaudio/best",
+        # Broad fallback chain — avoids "Requested format is not available"
+        "format": "bestaudio[acodec!=none]/bestaudio/best[acodec!=none]/best",
         "outtmpl": output_template,
         "postprocessors": postprocessors,
         "quiet": True,
         "no_warnings": True,
-        "writethumbnail": True,
         "progress_hooks": hooks,
         "noplaylist": True,
     }
