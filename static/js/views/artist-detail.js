@@ -16,7 +16,7 @@ function renderArtistPage(container, artist, albums) {
   const stats = artist.statistics || {};
   const imgUrl = (artist.images || []).find(i => i.coverType === 'cover' || i.coverType === 'poster')?.remoteUrl;
   container.innerHTML = `
-    <a href="#/artists" class="text-muted" style="display:inline-flex;align-items:center;gap:6px;margin-bottom:16px;font-size:13px">← All Artists</a>
+    <a href="#/artists" class="back-link">← All Artists</a>
     <div class="artist-header">
       <div class="artist-header-art">${imgUrl ? `<img src="${imgUrl}" alt="${esc(artist.artistName)}" onerror="this.style.display='none'" />` : '🎤'}</div>
       <div class="artist-header-info">
@@ -125,6 +125,10 @@ function buildAlbumSection(album) {
   const hdr  = section.querySelector(`#album-hdr-${album.id}`);
   const wrap = section.querySelector(`#tracks-${album.id}`);
   hdr.addEventListener('click', () => {
+    if (window.innerWidth <= 640) {
+      navigate(`/artist/${album.artistId}/album/${album.id}`);
+      return;
+    }
     const isOpen = hdr.classList.toggle('open');
     wrap.classList.toggle('open', isOpen);
     if (isOpen && !wrap.dataset.loaded) loadTracks(album, wrap);
@@ -249,4 +253,83 @@ function fmtViews(n) {
   if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
   if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
   return String(n);
+}
+
+// ── Album tracks page (used on mobile navigation & desktop route) ─────────────
+
+async function renderAlbumTracksView(container, artistId, albumId) {
+  container.innerHTML = '<div class="loading-center"><div class="spinner"></div></div>';
+  try {
+    const [artist, album] = await Promise.all([
+      API.getArtist(artistId),
+      API.getAlbum(albumId),
+    ]);
+    const imgUrl = (album.images || []).find(i => i.coverType === 'cover' || i.coverType === 'poster')?.remoteUrl;
+    const year   = (album.releaseDate || '').slice(0, 4) || '?';
+    const stats  = album.statistics || {};
+
+    container.innerHTML = `
+      <a href="#/artist/${artistId}" class="back-link">← ${esc(artist.artistName)}</a>
+      <div class="album-page-header">
+        <div class="album-page-art" id="alp-art">
+          ${imgUrl ? `<img src="${esc(imgUrl)}" alt="${esc(album.title)}" onerror="this.style.display='none'" />` : '💿'}
+        </div>
+        <div class="album-page-info">
+          <div class="album-page-title">${esc(album.title)}</div>
+          <div class="album-page-meta">${esc(album.albumType)} · ${year}</div>
+          <div class="stat-chips" style="margin-top:10px">
+            <span class="chip"><strong>${stats.trackFileCount || 0}</strong> / <strong>${stats.trackCount || 0}</strong> tracks</span>
+            ${album.anyTracksMissing
+              ? '<span class="chip text-danger">Missing</span>'
+              : '<span class="chip text-success">Complete</span>'}
+          </div>
+          <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            ${album.anyTracksMissing ? '<button class="btn btn-primary btn-sm" id="alp-search-btn">Search Missing</button>' : ''}
+            <label class="toggle" title="Monitor album"><input type="checkbox" id="alp-monitor-chk" ${album.monitored ? 'checked' : ''} /><span class="toggle-slider"></span></label>
+            <span class="text-muted" style="font-size:12px">Monitored</span>
+          </div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <div id="alp-tracks-wrap"><div class="loading-center"><div class="spinner"></div></div></div>
+      </div>
+    `;
+
+    if (!imgUrl) {
+      API.getAlbumImage(albumId).then(data => {
+        if (!data?.url) return;
+        const el = document.getElementById('alp-art');
+        if (el && !el.querySelector('img')) {
+          const img = document.createElement('img');
+          img.src = data.url; img.alt = album.title;
+          img.onerror = () => img.style.display = 'none';
+          el.textContent = '';
+          el.appendChild(img);
+        }
+      }).catch(() => {});
+    }
+
+    document.getElementById('alp-monitor-chk').addEventListener('change', async function() {
+      await API.updateAlbum(albumId, { monitored: this.checked }).catch(e => toast(e.message, 'error'));
+    });
+    const searchBtn = document.getElementById('alp-search-btn');
+    if (searchBtn) searchBtn.addEventListener('click', async () => {
+      try { await API.searchAlbum(albumId); toast('Search queued — check Queue', 'info'); navigate('/queue'); }
+      catch (e) { toast(e.message, 'error'); }
+    });
+
+    const wrap = document.getElementById('alp-tracks-wrap');
+    let tracks = await API.getTracks(albumId);
+    if (!tracks || tracks.length === 0) {
+      await API.refreshAlbum(albumId);
+      tracks = await API.getTracks(albumId);
+    }
+    if (!tracks || tracks.length === 0) {
+      wrap.innerHTML = '<p class="text-muted" style="padding:16px">No tracks found. Try refreshing the artist.</p>';
+      return;
+    }
+    renderTrackTable(wrap, album, tracks);
+  } catch (err) {
+    container.innerHTML = `<p class="text-danger" style="padding:20px">Failed to load: ${err.message}</p>`;
+  }
 }

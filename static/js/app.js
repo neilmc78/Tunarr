@@ -22,12 +22,13 @@ function toast(msg, type = 'info') {
 let _currentView = null;
 
 const routes = {
-  '/artists':    renderArtistsView,
-  '/artist/:id': (c, p) => renderArtistDetailView(c, parseInt(p.id)),
-  '/queue':      renderQueueView,
-  '/wanted':     renderWantedView,
-  '/history':    renderHistoryView,
-  '/settings':   renderSettingsView,
+  '/artists':                          renderArtistsView,
+  '/artist/:id':                       (c, p) => renderArtistDetailView(c, parseInt(p.id)),
+  '/artist/:artistId/album/:albumId':  (c, p) => renderAlbumTracksView(c, parseInt(p.artistId), parseInt(p.albumId)),
+  '/queue':                            renderQueueView,
+  '/wanted':                           renderWantedView,
+  '/history':                          renderHistoryView,
+  '/settings':                         renderSettingsView,
 };
 
 function navigate(path) { window.location.hash = path; }
