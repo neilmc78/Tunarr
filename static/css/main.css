@@ -271,9 +271,11 @@ a:hover { color: var(--accent-hover); }
   .album-stats { flex: 0 0 100%; padding-left: 60px; gap: 6px; padding-bottom: 4px; }
   .album-stats .album-search-btn { display: none; } /* search from track page instead */
 
-  /* Track table: hide # and duration on mobile to give title room */
+  /* Track table: hide # and duration on mobile to give title+actions room */
   .track-table th.track-num,
-  .track-table td.track-num { display: none; }
+  .track-table td.track-num,
+  .track-table th.track-dur,
+  .track-table td.track-dur { display: none; }
   .track-actions { width: 76px; }
 
   /* Album page: stack on mobile */
