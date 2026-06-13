@@ -27,7 +27,6 @@ async def search_youtube_music(query: str, limit: int = 5) -> list[dict]:
         "no_warnings": True,
         "extract_flat": True,
         "skip_download": True,
-        "extractor_args": {"youtube": {"player_client": ["ios"]}},
     }
 
     def _search():
@@ -106,8 +105,6 @@ async def download_track(
         "no_warnings": True,
         "progress_hooks": hooks,
         "noplaylist": True,
-        # Use iOS client to avoid 403s — doesn't require a JS runtime
-        "extractor_args": {"youtube": {"player_client": ["ios"]}},
     }
 
     result: dict[str, Any] = {}
