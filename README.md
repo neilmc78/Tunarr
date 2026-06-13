@@ -53,6 +53,34 @@ docker compose up -d
 # Open http://localhost:8686
 ```
 
+### Proxmox LXC (community-scripts style)
+
+Run this on your **Proxmox VE host** shell:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/neilmc78/Tunarr/main/install/tunarr-lxc.sh)
+```
+
+The script will prompt for container settings (all have sensible defaults — just press Enter to accept):
+
+| Setting | Default |
+|---------|---------|
+| Container ID | next available |
+| Hostname | `tunarr` |
+| CPU cores | `2` |
+| RAM | `1024 MB` |
+| Disk | `8 GB` on `local-lvm` |
+| Network | DHCP on `vmbr0` |
+| Music path | `/mnt/music` (bind-mounted into CT) |
+
+It creates an unprivileged Debian 12 LXC, installs ffmpeg + Python deps, and starts Tunarr as a systemd service on port **8686**.
+
+**To update an existing install** (run inside the container):
+
+```bash
+pct exec <CTID> -- bash /opt/tunarr/install/tunarr-lxc.sh update
+```
+
 ### Local (Python 3.11+)
 
 ```bash
