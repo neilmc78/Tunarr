@@ -76,11 +76,18 @@ function initSidebar() {
   const sidebar = document.getElementById('sidebar');
   const toggle  = document.getElementById('sidebar-toggle');
   if (!sidebar || !toggle) return;
-  if (localStorage.getItem('tunarr_sidebar_collapsed') === '1') {
+
+  // Auto-collapse on small screens unless user has explicitly expanded it
+  const savedPref = localStorage.getItem('tunarr_sidebar_collapsed');
+  const isMobile  = window.innerWidth <= 640;
+  const shouldCollapse = savedPref === '1' || (isMobile && savedPref !== '0');
+
+  if (shouldCollapse) {
     sidebar.classList.add('collapsed');
     toggle.textContent = '»';
     toggle.title = 'Expand sidebar';
   }
+
   toggle.addEventListener('click', () => {
     const collapsed = sidebar.classList.toggle('collapsed');
     toggle.textContent = collapsed ? '»' : '«';
