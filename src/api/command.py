@@ -159,6 +159,32 @@ async def _run_command(cmd: dict, body: CommandIn):
             finally:
                 db.close()
 
+        elif name == "ScanLibrary":
+            from ..models import RootFolder
+            from ..services.scanner import scan_root_folder
+
+            db: Session = SessionLocal()
+            try:
+                folders = db.query(RootFolder).all()
+                paths = [f.path for f in folders]
+            finally:
+                db.close()
+
+            if not paths:
+                cmd["message"] = "No root folders configured — add one in Settings first"
+            else:
+                total = {'scanned': 0, 'imported': 0, 'skipped': 0, 'errors': 0}
+                for path in paths:
+                    stats = await asyncio.to_thread(scan_root_folder, path)
+                    for k in total:
+                        total[k] += stats[k]
+                cmd["message"] = (
+                    f"Scanned {total['scanned']} files: "
+                    f"{total['imported']} imported, "
+                    f"{total['skipped']} already present, "
+                    f"{total['errors']} errors"
+                )
+
         else:
             cmd["message"] = f"Unknown command: {name}"
 

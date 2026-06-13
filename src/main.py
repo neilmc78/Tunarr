@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
     Path(settings.music_dir).mkdir(parents=True, exist_ok=True)
 
     init_db()
-    _seed_default_quality_profile()
+    _seed_quality_profiles()
 
     logger.info("Resuming pending downloads")
     await process_pending_queue()
@@ -36,19 +36,40 @@ async def lifespan(app: FastAPI):
     logger.info("Tunarr shutting down")
 
 
-def _seed_default_quality_profile():
+def _seed_quality_profiles():
+    """Ensure the three default profiles exist (by name), preserving any user-created ones."""
+    defaults = [
+        {
+            "name": "Any",
+            "upgrade_allowed": True,
+            "cutoff": 1,
+            "items": QUALITY_DEFINITIONS,
+        },
+        {
+            "name": "MP3 Standard",
+            "upgrade_allowed": True,
+            "cutoff": 3,
+            "items": [q for q in QUALITY_DEFINITIONS if q["id"] in {1, 2, 3, 4, 5}],
+        },
+        {
+            "name": "FLAC Preferred",
+            "upgrade_allowed": True,
+            "cutoff": 6,
+            "items": [q for q in QUALITY_DEFINITIONS if q["id"] in {6, 7}],
+        },
+    ]
     db = SessionLocal()
     try:
-        if db.query(QualityProfile).count() == 0:
-            qp = QualityProfile(
-                name="Standard",
-                upgrade_allowed=True,
-                cutoff=3,
-                items=json.dumps(QUALITY_DEFINITIONS),
-            )
-            db.add(qp)
-            db.commit()
-            logger.info("Created default quality profile 'Standard'")
+        for d in defaults:
+            if not db.query(QualityProfile).filter(QualityProfile.name == d["name"]).first():
+                db.add(QualityProfile(
+                    name=d["name"],
+                    upgrade_allowed=d["upgrade_allowed"],
+                    cutoff=d["cutoff"],
+                    items=json.dumps(d["items"]),
+                ))
+        db.commit()
+        logger.info("Quality profiles seeded")
     finally:
         db.close()
 

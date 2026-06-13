@@ -36,10 +36,12 @@ const API = (() => {
     monitorTracks:   (ids, m)  => API.put('/api/v3/track/monitor', { trackIds: ids, monitored: m }),
 
     sendCommand:         (body)  => API.post('/api/v3/command', body),
+    getCommand:          (id)    => API.get(`/api/v3/command/${id}`),
     searchTrack:         (tid)   => API.post('/api/v3/command', { name: 'TrackSearch', trackIds: [tid] }),
     searchAlbum:         (aid)   => API.post('/api/v3/command', { name: 'AlbumSearch', albumId: aid }),
     searchArtistMissing: (aid)   => API.post('/api/v3/command', { name: 'ArtistSearch', artistId: aid }),
     refreshArtist:       (aid)   => API.post('/api/v3/command', { name: 'RefreshArtist', artistId: aid }),
+    scanLibrary:         ()      => API.post('/api/v3/command', { name: 'ScanLibrary' }),
 
     getQueue:        ()        => API.get('/api/v3/queue'),
     removeQueue:     (id)      => API.delete(`/api/v3/queue/${id}`),
@@ -50,10 +52,15 @@ const API = (() => {
 
     searchYT:        (query)  => API.get(`/api/v3/search/track?query=${encodeURIComponent(query)}`),
 
-    getRootFolders:  ()       => API.get('/api/v3/rootfolder'),
-    addRootFolder:   (path)   => API.post('/api/v3/rootfolder', { path }),
-    deleteRootFolder:(id)     => API.delete(`/api/v3/rootfolder/${id}`),
-    getQProfiles:    ()       => API.get('/api/v3/qualityprofile'),
-    getStatus:       ()       => API.get('/api/v3/system/status'),
+    getRootFolders:   ()       => API.get('/api/v3/rootfolder'),
+    addRootFolder:    (path)   => API.post('/api/v3/rootfolder', { path }),
+    deleteRootFolder: (id)     => API.delete(`/api/v3/rootfolder/${id}`),
+
+    getQProfiles:     ()       => API.get('/api/v3/qualityprofile'),
+    addQProfile:      (body)   => API.post('/api/v3/qualityprofile', body),
+    deleteQProfile:   (id)     => API.delete(`/api/v3/qualityprofile/${id}`),
+    getQualityDefs:   ()       => API.get('/api/v3/qualitydefinition'),
+
+    getStatus:        ()       => API.get('/api/v3/system/status'),
   };
 })();
