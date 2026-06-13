@@ -57,6 +57,6 @@ async function removeFromQueue(id) {
 }
 
 function statusBadgeForQueue(status) {
-  const map = { queued: 'status-monitored', downloading: 'status-monitored', importing: 'status-queued', completed: 'status-downloaded', failed: 'status-missing' };
+  const map = { searching: 'status-monitored', queued: 'status-monitored', downloading: 'status-monitored', importing: 'status-queued', completed: 'status-downloaded', failed: 'status-missing' };
   return `<span class="status-badge ${map[status] || ''}">${status}</span>`;
 }

@@ -1,14 +1,15 @@
 import asyncio
+import json
 import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db, SessionLocal
-from ..models import Artist, Album, Track
+from ..models import Artist, Album, Track, DownloadQueue, History
 from ..schemas import CommandIn, CommandOut
 from ..services.downloader import search_youtube_music
-from ..download_manager import enqueue_track_download
+from ..download_manager import _run_download, _active_downloads
 
 router = APIRouter(prefix="/api/v3/command", tags=["command"])
 
@@ -40,45 +41,107 @@ def _new_command(name: str) -> dict:
     return cmd
 
 
-async def _search_and_grab_track(track_id: int):
+def _get_missing_track_ids(db: Session, track_ids: list[int] | None = None,
+                            album_id: int | None = None, artist_id: int | None = None) -> list[int]:
+    q = db.query(Track).filter(Track.monitored == True, Track.has_file == False)
+    if track_ids is not None:
+        q = q.filter(Track.id.in_(track_ids))
+    if album_id is not None:
+        q = q.filter(Track.album_id == album_id)
+    if artist_id is not None:
+        q = q.filter(Track.artist_id == artist_id)
+    return [t.id for t in q.all()]
+
+
+def _pre_enqueue_tracks(db: Session, track_ids: list[int]) -> list[int]:
+    """Create placeholder queue items for all tracks immediately. Returns list of queue IDs."""
+    queue_ids = []
+    for track_id in track_ids:
+        track = db.get(Track, track_id)
+        if not track or track.has_file:
+            continue
+        artist = db.get(Artist, track.artist_id)
+        if not artist:
+            continue
+        album = db.get(Album, track.album_id)
+
+        item = DownloadQueue(
+            track_id=track_id,
+            album_id=track.album_id,
+            artist_id=track.artist_id,
+            download_id=str(uuid.uuid4()),
+            title=f"{artist.name} - {track.title}",
+            status="searching",
+            protocol="ytdlp",
+            source_url="",
+        )
+        db.add(item)
+        db.flush()  # populate item.id
+        queue_ids.append(item.id)
+
+    db.commit()
+    return queue_ids
+
+
+async def _search_and_start(queue_id: int):
+    """Find the best YouTube match for a pre-created queue item and kick off download."""
     async with _get_search_semaphore():
         db: Session = SessionLocal()
         try:
-            track = db.get(Track, track_id)
-            if not track or track.has_file:
+            item = db.get(DownloadQueue, queue_id)
+            if not item or item.status != "searching":
                 return
+
+            track = db.get(Track, item.track_id) if item.track_id else None
+            if not track:
+                item.status = "failed"
+                item.error_message = "Track not found"
+                db.commit()
+                return
+
             album = db.get(Album, track.album_id)
             artist = db.get(Artist, track.artist_id)
             if not artist:
+                item.status = "failed"
+                item.error_message = "Artist not found"
+                db.commit()
                 return
 
-            query = f"{artist.name} {track.title}"
+            query = f"{artist.name} - {track.title}"
             if album:
-                query = f"{artist.name} - {track.title} {album.title}"
+                query += f" {album.title}"
 
             results = await search_youtube_music(query, limit=3)
             if not results:
+                item.status = "failed"
+                item.error_message = "No YouTube results found"
+                db.commit()
                 return
 
             best = results[0]
             expected_ms = track.duration or 0
             if expected_ms > 0:
                 for r in results:
-                    diff = abs((r.get("duration") or 0) - expected_ms)
-                    best_diff = abs((best.get("duration") or 0) - expected_ms)
-                    if diff < best_diff:
+                    if abs((r.get("duration") or 0) - expected_ms) < abs((best.get("duration") or 0) - expected_ms):
                         best = r
 
-            source_title = f"{artist.name} - {track.title}"
-            await enqueue_track_download(
-                db=db,
-                track_id=track_id,
-                source_url=best["url"],
-                source_title=source_title,
-                protocol="ytdlp",
-            )
+            item.source_url = best["url"]
+            item.status = "queued"
+            db.add(History(
+                track_id=item.track_id,
+                album_id=item.album_id,
+                artist_id=item.artist_id,
+                source_title=item.title,
+                quality=json.dumps({"quality": {"id": 0, "name": "Unknown"}}),
+                event_type="grabbed",
+                data=json.dumps({"protocol": "ytdlp", "url": best["url"]}),
+            ))
+            db.commit()
         finally:
             db.close()
+
+        task = asyncio.create_task(_run_download(queue_id))
+        _active_downloads[queue_id] = task
 
 
 async def _run_command(cmd: dict, body: CommandIn):
@@ -88,41 +151,22 @@ async def _run_command(cmd: dict, body: CommandIn):
     try:
         name = body.name
 
-        if name == "TrackSearch":
-            tasks = [_search_and_grab_track(tid) for tid in body.trackIds]
-            await asyncio.gather(*tasks, return_exceptions=True)
-
-        elif name == "AlbumSearch":
-            if not body.albumId:
-                raise ValueError("albumId required for AlbumSearch")
+        if name in ("TrackSearch", "AlbumSearch", "ArtistSearch"):
             db: Session = SessionLocal()
             try:
-                tracks = db.query(Track).filter(
-                    Track.album_id == body.albumId,
-                    Track.monitored == True,
-                    Track.has_file == False,
-                ).all()
-                track_ids = [t.id for t in tracks]
+                track_ids = _get_missing_track_ids(
+                    db,
+                    track_ids=body.trackIds if name == "TrackSearch" else None,
+                    album_id=body.albumId  if name == "AlbumSearch"  else None,
+                    artist_id=body.artistId if name == "ArtistSearch" else None,
+                )
+                queue_ids = _pre_enqueue_tracks(db, track_ids)
             finally:
                 db.close()
-            tasks = [_search_and_grab_track(tid) for tid in track_ids]
-            await asyncio.gather(*tasks, return_exceptions=True)
 
-        elif name == "ArtistSearch":
-            if not body.artistId:
-                raise ValueError("artistId required for ArtistSearch")
-            db: Session = SessionLocal()
-            try:
-                tracks = db.query(Track).filter(
-                    Track.artist_id == body.artistId,
-                    Track.monitored == True,
-                    Track.has_file == False,
-                ).all()
-                track_ids = [t.id for t in tracks]
-            finally:
-                db.close()
-            tasks = [_search_and_grab_track(tid) for tid in track_ids]
+            tasks = [_search_and_start(qid) for qid in queue_ids]
             await asyncio.gather(*tasks, return_exceptions=True)
+            cmd["message"] = f"Queued {len(queue_ids)} tracks"
 
         elif name == "RefreshArtist":
             if not body.artistId:
@@ -145,7 +189,6 @@ async def _run_command(cmd: dict, body: CommandIn):
                 artist.links     = _json.dumps(mb_data.get("links", []))
                 artist.genres    = _json.dumps(mb_data.get("genres", []))
 
-                # Match by MBID first, then by title to avoid duplicating scan stubs
                 existing_by_mbid  = {al.musicbrainz_id: al for al in artist.albums}
                 existing_by_title = {al.title.lower(): al  for al in artist.albums}
 

@@ -200,6 +200,12 @@ async def enqueue_track_download(
 async def process_pending_queue():
     db: Session = SessionLocal()
     try:
+        # Items stuck in "searching" from a previous run have no source URL — mark failed
+        db.query(DownloadQueue).filter(
+            DownloadQueue.status == "searching"
+        ).update({"status": "failed", "error_message": "Search interrupted by restart"})
+        db.commit()
+
         pending = db.query(DownloadQueue).filter(
             DownloadQueue.status.in_(["queued", "downloading"])
         ).all()
