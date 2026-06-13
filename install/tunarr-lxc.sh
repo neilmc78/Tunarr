@@ -75,7 +75,7 @@ ask_yn() {
   local prompt=$1 default=${2:-n}
   read -rp "  ${BL}${prompt}${CL} [${DGN}${default}${CL}]: " input
   input=${input:-$default}
-  [[ "${input,,}" =~ ^y ]]
+  [[  "${input,,}" =~ ^y ]]
 }
 
 # ── Pre-flight checks ─────────────────────────────────────────────────────────
@@ -97,17 +97,37 @@ get_next_ctid() {
 }
 
 get_template() {
-  # Download Debian 12 template if not already present
   local tmpl_store="local"
-  local tmpl="debian-12-standard_12.7-1_amd64.tar.zst"
-  local tmpl_path="/var/lib/vz/template/cache/${tmpl}"
 
-  if [[ ! -f "${tmpl_path}" ]]; then
-    msg_info "Downloading Debian 12 template"
-    pveam update &>/dev/null
-    pveam download "${tmpl_store}" "${tmpl}" &>/dev/null
-    msg_ok "Template downloaded"
+  msg_info "Updating Proxmox template list"
+  pveam update >/dev/null 2>&1 || true
+  msg_ok "Template list updated"
+
+  msg_info "Finding latest Debian 12 template"
+  local tmpl
+  tmpl=$(pveam available --section system 2>/dev/null \
+    | awk '/debian-12-standard/{print $2}' \
+    | sort -V \
+    | tail -1)
+
+  if [[ -z "${tmpl}" ]]; then
+    msg_error "No Debian 12 template found — run: pveam update && pveam available --section system"
+    exit 1
   fi
+  msg_ok "Found template: ${tmpl}"
+
+  local tmpl_path="/var/lib/vz/template/cache/${tmpl}"
+  if [[ ! -f "${tmpl_path}" ]]; then
+    msg_info "Downloading ${tmpl}"
+    if ! pveam download "${tmpl_store}" "${tmpl}" >/dev/null 2>&1; then
+      msg_error "Template download failed — check network and run: pveam available --section system"
+      exit 1
+    fi
+    msg_ok "Template downloaded"
+  else
+    msg_ok "Template already present"
+  fi
+
   TEMPLATE="${tmpl_store}:vztmpl/${tmpl}"
 }
 
