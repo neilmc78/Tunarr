@@ -195,6 +195,8 @@ async def get_or_fetch_artist_image(artist_id: int, db: Session = Depends(get_db
     if existing:
         return {"url": existing.get("remoteUrl")}
     url = await tadb.get_artist_image(a.musicbrainz_id)
+    if not url:
+        url = await tadb.get_artist_image_by_name(a.name)
     if url:
         images = [{"coverType": "poster", "remoteUrl": url}] + images
         a.images = json.dumps(images)

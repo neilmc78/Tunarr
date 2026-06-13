@@ -31,18 +31,6 @@ def get_track(track_id: int, db: Session = Depends(get_db)):
     return TrackOut.from_orm(t)
 
 
-@router.put("/{track_id}", response_model=TrackOut)
-def update_track(track_id: int, body: TrackUpdate, db: Session = Depends(get_db)):
-    t = db.get(Track, track_id)
-    if not t:
-        raise HTTPException(404, "Track not found")
-    if body.monitored is not None:
-        t.monitored = body.monitored
-    db.commit()
-    db.refresh(t)
-    return TrackOut.from_orm(t)
-
-
 @router.put("/monitor", response_model=list[TrackOut])
 def monitor_tracks(body: TrackMonitorBulk, db: Session = Depends(get_db)):
     updated = []
@@ -53,3 +41,15 @@ def monitor_tracks(body: TrackMonitorBulk, db: Session = Depends(get_db)):
             updated.append(t)
     db.commit()
     return [TrackOut.from_orm(t) for t in updated]
+
+
+@router.put("/{track_id}", response_model=TrackOut)
+def update_track(track_id: int, body: TrackUpdate, db: Session = Depends(get_db)):
+    t = db.get(Track, track_id)
+    if not t:
+        raise HTTPException(404, "Track not found")
+    if body.monitored is not None:
+        t.monitored = body.monitored
+    db.commit()
+    db.refresh(t)
+    return TrackOut.from_orm(t)

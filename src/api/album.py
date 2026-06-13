@@ -6,6 +6,7 @@ from ..database import get_db
 from ..models import Album, Artist, Track
 from ..schemas import AlbumOut, AlbumUpdate
 from ..services import musicbrainz as mb
+from ..services import tadb
 
 router = APIRouter(prefix="/api/v3/album", tags=["album"])
 
@@ -42,6 +43,26 @@ def update_album(album_id: int, body: AlbumUpdate, db: Session = Depends(get_db)
     db.commit()
     db.refresh(al)
     return AlbumOut.from_orm_album(al)
+
+
+@router.get("/{album_id}/image")
+async def get_or_fetch_album_image(album_id: int, db: Session = Depends(get_db)):
+    """Return cached album art URL or fetch from TheAudioDB and cache it."""
+    al = db.get(Album, album_id)
+    if not al:
+        raise HTTPException(404, "Album not found")
+    images = json.loads(al.images or "[]")
+    existing = next((i for i in images if i.get("coverType") in ("cover", "poster")), None)
+    if existing:
+        return {"url": existing.get("remoteUrl")}
+    artist = db.get(Artist, al.artist_id)
+    artist_name = artist.name if artist else ""
+    url = await tadb.get_album_image(artist_name, al.title)
+    if url:
+        images = [{"coverType": "cover", "remoteUrl": url}] + images
+        al.images = json.dumps(images)
+        db.commit()
+    return {"url": url}
 
 
 @router.post("/{album_id}/tracks/refresh")

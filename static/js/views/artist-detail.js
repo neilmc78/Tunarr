@@ -90,13 +90,13 @@ function buildAlbumSection(album) {
   const section = document.createElement('div');
   section.className = 'album-section';
   section.id = `album-${album.id}`;
-  const imgUrl = (album.images || []).find(i => i.coverType === 'cover')?.remoteUrl;
+  const imgUrl = (album.images || []).find(i => i.coverType === 'cover' || i.coverType === 'poster')?.remoteUrl;
   const year = (album.releaseDate || '').slice(0, 4) || '?';
   const stats = album.statistics || {};
   const pct = Math.round(stats.percentOfTracks || 0);
   section.innerHTML = `
     <div class="album-header" id="album-hdr-${album.id}">
-      <div class="album-art-thumb">${imgUrl ? `<img src="${imgUrl}" alt="${esc(album.title)}" loading="lazy" onerror="this.style.display='none'" />` : '💿'}</div>
+      <div class="album-art-thumb" id="album-thumb-${album.id}">${imgUrl ? `<img src="${imgUrl}" alt="${esc(album.title)}" loading="lazy" onerror="this.style.display='none'" />` : '💿'}</div>
       <div class="album-header-info"><div class="album-title">${esc(album.title)}</div><div class="album-meta">${esc(album.albumType)} · ${year} · ${stats.trackCount || 0} tracks</div></div>
       <div class="album-stats">
         <span class="text-muted" style="font-size:12px">${stats.trackFileCount || 0}/${stats.trackCount || 0} · ${pct}%</span>
@@ -108,6 +108,20 @@ function buildAlbumSection(album) {
     </div>
     <div class="track-table-wrap" id="tracks-${album.id}"><div class="loading-center" style="padding:20px"><div class="spinner"></div></div></div>
   `;
+  // Lazy-load album art from TheAudioDB if not already cached
+  if (!imgUrl) {
+    API.getAlbumImage(album.id).then(data => {
+      if (!data?.url) return;
+      const thumb = document.getElementById(`album-thumb-${album.id}`);
+      if (!thumb || thumb.querySelector('img')) return;
+      const img = document.createElement('img');
+      img.src = data.url; img.alt = album.title; img.loading = 'lazy';
+      img.onerror = () => img.style.display = 'none';
+      thumb.textContent = '';
+      thumb.appendChild(img);
+    }).catch(() => {});
+  }
+
   const hdr  = section.querySelector(`#album-hdr-${album.id}`);
   const wrap = section.querySelector(`#tracks-${album.id}`);
   hdr.addEventListener('click', () => {

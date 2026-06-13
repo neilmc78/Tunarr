@@ -1,5 +1,5 @@
 from pathlib import Path
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from .config import settings
@@ -12,10 +12,19 @@ class Base(DeclarativeBase):
 def get_engine():
     db_path = settings.db_path
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-    return create_engine(
+    engine = create_engine(
         f"sqlite:///{db_path}",
         connect_args={"check_same_thread": False},
     )
+
+    @event.listens_for(engine, "connect")
+    def _set_pragmas(conn, _):
+        cur = conn.cursor()
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.execute("PRAGMA synchronous=NORMAL")
+        cur.close()
+
+    return engine
 
 
 engine = get_engine()
@@ -26,6 +35,9 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 

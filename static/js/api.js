@@ -29,6 +29,7 @@ const API = (() => {
     getAlbums:       (artistId) => API.get(`/api/v3/album?artistId=${artistId}`),
     getAlbum:        (id)       => API.get(`/api/v3/album/${id}`),
     updateAlbum:     (id, b)    => API.put(`/api/v3/album/${id}`, b),
+    getAlbumImage:   (id)       => API.get(`/api/v3/album/${id}/image`),
     refreshAlbum:    (id)       => API.post(`/api/v3/album/${id}/tracks/refresh`, {}),
 
     getTracks:       (albumId) => API.get(`/api/v3/track?albumId=${albumId}`),
