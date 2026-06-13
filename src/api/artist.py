@@ -6,6 +6,7 @@ from ..database import get_db
 from ..models import Artist, Album, Track, QualityProfile
 from ..schemas import ArtistOut, ArtistIn, ArtistUpdate, ArtistLookup
 from ..services import musicbrainz as mb
+from ..services import tadb
 
 router = APIRouter(prefix="/api/v3/artist", tags=["artist"])
 
@@ -46,6 +47,12 @@ async def add_artist(body: ArtistIn, db: Session = Depends(get_db)):
     # Check for a scan stub with the same name (has a random UUID as MBID)
     stub = db.query(Artist).filter(Artist.name.ilike(real_name)).first()
 
+    # Fetch artist image from TheAudioDB (best-effort, non-blocking)
+    tadb_url = await tadb.get_artist_image(body.musicBrainzId)
+    mb_images = mb_data.get("images", [])
+    if tadb_url and not any(i.get("remoteUrl") == tadb_url for i in mb_images):
+        mb_images = [{"coverType": "poster", "remoteUrl": tadb_url}] + list(mb_images)
+
     if stub:
         # Merge: promote the stub to a fully enriched artist
         stub.musicbrainz_id   = body.musicBrainzId
@@ -59,7 +66,7 @@ async def add_artist(body: ArtistIn, db: Session = Depends(get_db)):
         stub.album_folder     = body.albumFolder
         stub.root_folder_path = body.rootFolderPath or stub.root_folder_path
         stub.quality_profile_id = qp_id
-        stub.images           = json.dumps(mb_data.get("images", []))
+        stub.images           = json.dumps(mb_images)
         stub.links            = json.dumps(mb_data.get("links", []))
         stub.genres           = json.dumps(mb_data.get("genres", []))
         artist = stub
@@ -76,7 +83,7 @@ async def add_artist(body: ArtistIn, db: Session = Depends(get_db)):
             album_folder=body.albumFolder,
             root_folder_path=body.rootFolderPath,
             quality_profile_id=qp_id,
-            images=json.dumps(mb_data.get("images", [])),
+            images=json.dumps(mb_images),
             links=json.dumps(mb_data.get("links", [])),
             genres=json.dumps(mb_data.get("genres", [])),
             tags=json.dumps([]),
@@ -173,3 +180,21 @@ async def lookup_artist(term: str, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(502, f"MusicBrainz search failed: {e}")
     return [ArtistLookup(**r) for r in results]
+
+
+@router.get("/{artist_id}/image")
+async def get_or_fetch_artist_image(artist_id: int, db: Session = Depends(get_db)):
+    """Return cached image URL or fetch from TheAudioDB and cache it."""
+    a = db.get(Artist, artist_id)
+    if not a:
+        raise HTTPException(404, "Artist not found")
+    images = json.loads(a.images or "[]")
+    existing = next((i for i in images if i.get("coverType") in ("poster", "cover")), None)
+    if existing:
+        return {"url": existing.get("remoteUrl")}
+    url = await tadb.get_artist_image(a.musicbrainz_id)
+    if url:
+        images = [{"coverType": "poster", "remoteUrl": url}] + images
+        a.images = json.dumps(images)
+        db.commit()
+    return {"url": url}
