@@ -32,8 +32,10 @@ function renderArtistPage(container, artist, albums) {
       <div class="artist-header-actions" id="artist-actions">
           <button class="btn btn-primary btn-sm" id="btn-search-all">Search All Missing</button>
           <button class="btn btn-secondary btn-sm" id="btn-refresh-artist">Refresh</button>
-          <label class="toggle" title="Monitored"><input type="checkbox" id="toggle-artist-monitored" ${artist.monitored ? 'checked' : ''} /><span class="toggle-slider"></span></label>
-          <span class="text-muted" style="font-size:12px">Monitored</span>
+          <span style="display:inline-flex;align-items:center;gap:6px">
+            <label class="toggle" title="Monitored"><input type="checkbox" id="toggle-artist-monitored" ${artist.monitored ? 'checked' : ''} /><span class="toggle-slider"></span></label>
+            <span class="text-muted" style="font-size:12px">Monitored</span>
+          </span>
           <span style="flex:1"></span>
           <button class="btn btn-danger btn-sm" id="btn-delete-artist">Delete Artist</button>
         </div>
