@@ -71,7 +71,25 @@ function onHashChange() {
   matched.handler(container, matched.params);
 }
 
+function initSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const toggle  = document.getElementById('sidebar-toggle');
+  if (!sidebar || !toggle) return;
+  if (localStorage.getItem('tunarr_sidebar_collapsed') === '1') {
+    sidebar.classList.add('collapsed');
+    toggle.textContent = '»';
+    toggle.title = 'Expand sidebar';
+  }
+  toggle.addEventListener('click', () => {
+    const collapsed = sidebar.classList.toggle('collapsed');
+    toggle.textContent = collapsed ? '»' : '«';
+    toggle.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+    localStorage.setItem('tunarr_sidebar_collapsed', collapsed ? '1' : '0');
+  });
+}
+
 function init() {
+  initSidebar();
   initAddArtistModal();
   initTrackSearchModal();
   window.addEventListener('hashchange', onHashChange);

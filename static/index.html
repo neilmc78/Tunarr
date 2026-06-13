@@ -11,27 +11,28 @@
     <aside id="sidebar">
       <div class="sidebar-brand">
         <span class="brand-icon">🎵</span>
-        <span class="brand-name">Tunarr</span>
+        <span class="brand-name sidebar-label">Tunarr</span>
       </div>
       <nav class="sidebar-nav">
         <a href="#/artists"  class="nav-item" data-view="artists">
-          <span class="nav-icon">🎤</span> Artists
+          <span class="nav-icon">🎤</span><span class="sidebar-label">Artists</span>
         </a>
         <a href="#/wanted"   class="nav-item" data-view="wanted">
-          <span class="nav-icon">🔍</span> Wanted
-          <span class="badge" id="badge-wanted" style="display:none">0</span>
+          <span class="nav-icon">🔍</span><span class="sidebar-label">Wanted</span>
+          <span class="badge sidebar-label" id="badge-wanted" style="display:none">0</span>
         </a>
         <a href="#/queue"    class="nav-item" data-view="queue">
-          <span class="nav-icon">⬇️</span> Queue
-          <span class="badge" id="badge-queue" style="display:none">0</span>
+          <span class="nav-icon">⬇️</span><span class="sidebar-label">Queue</span>
+          <span class="badge sidebar-label" id="badge-queue" style="display:none">0</span>
         </a>
         <a href="#/history"  class="nav-item" data-view="history">
-          <span class="nav-icon">📋</span> History
+          <span class="nav-icon">📋</span><span class="sidebar-label">History</span>
         </a>
         <a href="#/settings" class="nav-item" data-view="settings">
-          <span class="nav-icon">⚙️</span> Settings
+          <span class="nav-icon">⚙️</span><span class="sidebar-label">Settings</span>
         </a>
       </nav>
+      <button class="sidebar-toggle" id="sidebar-toggle" title="Collapse sidebar">«</button>
     </aside>
 
     <main id="main-content">

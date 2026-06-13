@@ -50,7 +50,7 @@ const API = (() => {
     clearCompleted:  ()        => API.delete('/api/v3/queue'),
 
     getHistory:      (p=1, ps=20) => API.get(`/api/v3/history?page=${p}&pageSize=${ps}`),
-    getMissing:      (p=1, ps=20) => API.get(`/api/v3/wanted/missing?page=${p}&pageSize=${ps}`),
+    getMissing:      (p=1, ps=25, q='') => API.get(`/api/v3/wanted/missing?page=${p}&pageSize=${ps}${q ? '&q=' + encodeURIComponent(q) : ''}`),
 
     searchYT:        (query)  => API.get(`/api/v3/search/track?query=${encodeURIComponent(query)}`),
 
