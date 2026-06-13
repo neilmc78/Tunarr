@@ -29,12 +29,13 @@ function renderArtistPage(container, artist, albums) {
           <span class="chip"><strong>${Math.round(stats.percentOfTracks || 0)}%</strong> complete</span>
           ${stats.missingTrackCount > 0 ? `<span class="chip text-danger"><strong>${stats.missingTrackCount}</strong> missing</span>` : ''}
         </div>
-        <div class="artist-header-actions" id="artist-actions">
+      <div class="artist-header-actions" id="artist-actions">
           <button class="btn btn-primary btn-sm" id="btn-search-all">Search All Missing</button>
           <button class="btn btn-secondary btn-sm" id="btn-refresh-artist">Refresh</button>
           <label class="toggle" title="Monitored"><input type="checkbox" id="toggle-artist-monitored" ${artist.monitored ? 'checked' : ''} /><span class="toggle-slider"></span></label>
-          <span class="text-muted" style="font-size:12px;align-self:center">Monitored</span>
-          <button class="btn btn-danger btn-sm" id="btn-delete-artist" style="margin-left:auto">Delete Artist</button>
+          <span class="text-muted" style="font-size:12px">Monitored</span>
+          <span style="flex:1"></span>
+          <button class="btn btn-danger btn-sm" id="btn-delete-artist">Delete Artist</button>
         </div>
         <div id="delete-confirm" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;padding:10px;border:1px solid var(--danger,#e05252);border-radius:6px;background:rgba(224,82,82,.08)">
           <span style="font-size:13px">Delete <strong>${esc(artist.artistName)}</strong> from Tunarr?</span>
@@ -94,13 +95,18 @@ function buildAlbumSection(album) {
   const year = (album.releaseDate || '').slice(0, 4) || '?';
   const stats = album.statistics || {};
   const pct = Math.round(stats.percentOfTracks || 0);
+  const albumStatusBadge = !album.monitored
+    ? `<span class="status-badge" style="background:rgba(255,255,255,.05);color:var(--text-dim)">Unmonitored</span>`
+    : album.anyTracksMissing
+      ? `<span class="status-badge status-missing">Missing</span>`
+      : `<span class="status-badge status-downloaded">Complete</span>`;
   section.innerHTML = `
     <div class="album-header" id="album-hdr-${album.id}">
       <div class="album-art-thumb" id="album-thumb-${album.id}">${imgUrl ? `<img src="${imgUrl}" alt="${esc(album.title)}" loading="lazy" onerror="this.style.display='none'" />` : '💿'}</div>
       <div class="album-header-info"><div class="album-title">${esc(album.title)}</div><div class="album-meta">${esc(album.albumType)} · ${year} · ${stats.trackCount || 0} tracks</div></div>
       <div class="album-stats">
         <span class="text-muted" style="font-size:12px">${stats.trackFileCount || 0}/${stats.trackCount || 0} · ${pct}%</span>
-        ${album.anyTracksMissing ? '<span class="status-badge status-missing">Missing</span>' : '<span class="status-badge status-downloaded">Complete</span>'}
+        ${albumStatusBadge}
         <label class="toggle" title="Monitor album" onclick="event.stopPropagation()"><input type="checkbox" class="album-monitor-toggle" data-album-id="${album.id}" ${album.monitored ? 'checked' : ''} /><span class="toggle-slider"></span></label>
         <button class="btn btn-sm btn-primary album-search-btn" data-album-id="${album.id}" onclick="event.stopPropagation()">Search</button>
       </div>
@@ -181,7 +187,7 @@ function buildTrackRow(track) {
     <td class="track-status">${status}</td>
     <td class="track-actions">
       <label class="toggle" title="Monitor" style="vertical-align:middle"><input type="checkbox" class="track-monitor-chk" data-track-id="${track.id}" ${track.monitored ? 'checked' : ''} /><span class="toggle-slider"></span></label>
-      ${!track.hasFile ? `<button class="btn btn-sm btn-primary track-search-btn" data-track-id="${track.id}" style="margin-left:6px">⬇</button>` : ''}
+      <button class="btn btn-sm ${track.hasFile ? 'btn-secondary' : 'btn-primary'} track-search-btn" data-track-id="${track.id}" style="margin-left:4px" title="${track.hasFile ? 'Re-download' : 'Download'}">⬇</button>
     </td>
   `;
   tr.querySelector('.track-monitor-chk').addEventListener('change', async function() {
@@ -189,8 +195,7 @@ function buildTrackRow(track) {
     track.monitored = this.checked;
     tr.replaceWith(buildTrackRow(track));
   });
-  const searchBtn = tr.querySelector('.track-search-btn');
-  if (searchBtn) searchBtn.addEventListener('click', () => openTrackSearchModal(track));
+  tr.querySelector('.track-search-btn').addEventListener('click', () => openTrackSearchModal(track));
   return tr;
 }
 
