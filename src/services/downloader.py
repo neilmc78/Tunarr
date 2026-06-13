@@ -99,8 +99,7 @@ async def download_track(
         hooks.append(ProgressHook(queue_id, progress_callback))
 
     ydl_opts = {
-        # Broad fallback chain — avoids "Requested format is not available"
-        "format": "bestaudio[acodec!=none]/bestaudio/best[acodec!=none]/best",
+        # No format restriction — yt_dlp picks best available, ffmpeg extracts audio
         "outtmpl": output_template,
         "postprocessors": postprocessors,
         "quiet": True,
