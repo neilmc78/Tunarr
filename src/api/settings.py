@@ -54,7 +54,7 @@ def delete_root_folder(folder_id: int, db: Session = Depends(get_db)):
 
 @router.get("/qualityprofile", response_model=list[QualityProfileOut])
 def list_quality_profiles(db: Session = Depends(get_db)):
-    return db.query(QualityProfile).all()
+    return [QualityProfileOut.from_orm_profile(p) for p in db.query(QualityProfile).all()]
 
 
 @router.post("/qualityprofile", response_model=QualityProfileOut, status_code=201)
@@ -69,7 +69,7 @@ def create_quality_profile(body: QualityProfileIn, db: Session = Depends(get_db)
     db.add(qp)
     db.commit()
     db.refresh(qp)
-    return qp
+    return QualityProfileOut.from_orm_profile(qp)
 
 
 @router.put("/qualityprofile/{profile_id}", response_model=QualityProfileOut)
@@ -84,7 +84,7 @@ def update_quality_profile(profile_id: int, body: QualityProfileIn, db: Session 
     qp.items = json.dumps(body.items)
     db.commit()
     db.refresh(qp)
-    return qp
+    return QualityProfileOut.from_orm_profile(qp)
 
 
 @router.delete("/qualityprofile/{profile_id}", status_code=200)

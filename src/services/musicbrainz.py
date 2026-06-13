@@ -80,8 +80,8 @@ async def get_release_group_with_tracks(rg_mbid: str) -> dict:
 
     releases = rg_data.get("releases", [])
     releases_sorted = sorted(
-        [r for r in releases if r.get("status", "").lower() == "official" or not r.get("status")],
-        key=lambda r: r.get("date", "9999"),
+        [r for r in releases if (r.get("status") or "").lower() == "official" or not r.get("status")],
+        key=lambda r: r.get("date") or "9999",
     )
     release_mbid = releases_sorted[0]["id"] if releases_sorted else None
     if not release_mbid and releases:

@@ -59,6 +59,16 @@ class QualityProfileOut(BaseModel):
     def parse_items(cls, v):
         return _parse_json_field(v)
 
+    @classmethod
+    def from_orm_profile(cls, p) -> "QualityProfileOut":
+        return cls(
+            id=p.id,
+            name=p.name,
+            upgradeAllowed=p.upgrade_allowed,
+            cutoff=p.cutoff,
+            items=p.items,
+        )
+
 
 class QualityProfileIn(BaseModel):
     name: str
