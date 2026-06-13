@@ -28,7 +28,9 @@ async def grab_track(body: GrabRequest, db: Session = Depends(get_db)):
         source_title=body.title,
         protocol=body.protocol,
     )
-    return QueueOut.from_orm(item).model_dump()
+    # Reload fresh — enqueue_track_download commits twice which expires relationships
+    fresh = db.get(DownloadQueue, item.id)
+    return QueueOut.from_orm(fresh).model_dump()
 
 
 @router.get("", response_model=dict)

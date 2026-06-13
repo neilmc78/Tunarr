@@ -42,14 +42,15 @@ async def _update_queue(queue_id: int, progress: float, status: str, size: int, 
 async def _run_download(queue_id: int):
     sem = _get_semaphore()
     async with sem:
+        # ── Phase 1: load data, mark downloading, extract plain values ──────
         db: Session = SessionLocal()
         try:
             item = db.get(DownloadQueue, queue_id)
             if not item or item.status not in ("queued", "downloading"):
                 return
 
-            track = db.get(Track, item.track_id) if item.track_id else None
-            album = db.get(Album, item.album_id) if item.album_id else None
+            track  = db.get(Track,  item.track_id)  if item.track_id  else None
+            album  = db.get(Album,  item.album_id)  if item.album_id  else None
             artist = db.get(Artist, item.artist_id)
 
             if not artist:
@@ -61,36 +62,55 @@ async def _run_download(queue_id: int):
             item.status = "downloading"
             db.commit()
 
-            root = artist.root_folder_path or settings.music_dir
-            year = (album.release_date or "")[:4] if album else ""
-            track_number = track.track_number if track else "01"
-            track_title = track.title if track else item.title
-            album_title = album.title if album else "Unknown Album"
-
-            output_template = build_output_template(
-                root_folder=str(Path(settings.downloads_dir)),
-                artist_name=artist.name,
-                album_title=album_title,
-                year=year,
-                track_number=track_number,
-                track_title=track_title,
-            )
-
+            # Extract everything as plain strings NOW — no ORM access after close
+            source_url   = item.source_url
+            artist_name  = artist.name
+            album_title  = album.title          if album else "Unknown Album"
+            year         = (album.release_date or "")[:4] if album else ""
+            track_number = track.track_number   if track else "01"
+            track_title  = track.title          if track else item.title
+        finally:
             db.close()
 
+        # ── Phase 2: download (no session held) ─────────────────────────────
+        output_template = build_output_template(
+            root_folder=str(Path(settings.downloads_dir)),
+            artist_name=artist_name,
+            album_title=album_title,
+            year=year,
+            track_number=track_number,
+            track_title=track_title,
+        )
+
+        try:
             result = await download_track(
-                url=item.source_url,
+                url=source_url,
                 output_template=output_template,
                 quality_id=3,
                 progress_callback=_update_queue,
                 queue_id=queue_id,
             )
-
+        except Exception as exc:
+            logger.exception("Download failed for queue id %s", queue_id)
+            _active_downloads.pop(queue_id, None)
             db = SessionLocal()
+            try:
+                item = db.get(DownloadQueue, queue_id)
+                if item:
+                    item.status = "failed"
+                    item.error_message = str(exc)
+                    _add_history_failed(db, item)
+                    db.commit()
+            finally:
+                db.close()
+            return
+
+        # ── Phase 3: import result ───────────────────────────────────────────
+        db = SessionLocal()
+        try:
             item = db.get(DownloadQueue, queue_id)
             if not item:
                 return
-
             downloaded_path = result.get("path", "")
             if downloaded_path and Path(downloaded_path).exists():
                 item.status = "importing"
@@ -103,28 +123,22 @@ async def _run_download(queue_id: int):
                     db.commit()
             else:
                 item.status = "failed"
-                item.error_message = "Downloaded file not found after completion"
+                item.error_message = f"File not found after download: {downloaded_path!r}"
                 _add_history_failed(db, item)
                 db.commit()
-
         except Exception as exc:
-            logger.exception("Download failed for queue id %s", queue_id)
-            db2: Session = SessionLocal()
+            logger.exception("Import failed for queue id %s", queue_id)
             try:
-                item2 = db2.get(DownloadQueue, queue_id)
-                if item2:
-                    item2.status = "failed"
-                    item2.error_message = str(exc)
-                    _add_history_failed(db2, item2)
-                    db2.commit()
-            finally:
-                db2.close()
-        finally:
-            _active_downloads.pop(queue_id, None)
-            try:
-                db.close()
+                item = db.get(DownloadQueue, queue_id)
+                if item:
+                    item.status = "failed"
+                    item.error_message = str(exc)
+                    db.commit()
             except Exception:
                 pass
+        finally:
+            _active_downloads.pop(queue_id, None)
+            db.close()
 
 
 def _add_history_failed(db: Session, item: DownloadQueue):
