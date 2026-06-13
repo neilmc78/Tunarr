@@ -241,7 +241,7 @@ install_tunarr() {
     apt-get update -qq
     apt-get install -y -qq \
       curl git ffmpeg python3 python3-pip python3-venv \
-      ca-certificates locales openssh-server &>/dev/null
+      ca-certificates locales openssh-server nodejs &>/dev/null
   ' &>/dev/null
   msg_ok "System packages installed"
 
@@ -357,6 +357,8 @@ if [[ "${1:-}" == "update" ]]; then
   printf "${YW}Updating Tunarr…${CL}\n"
   systemctl stop tunarr
   git -C "${APP_DIR}" pull --ff-only
+  "${APP_DIR}/venv/bin/pip" install --quiet --upgrade pip
+  "${APP_DIR}/venv/bin/pip" install --quiet --upgrade yt-dlp
   "${APP_DIR}/venv/bin/pip" install --quiet -r "${APP_DIR}/requirements.txt"
   systemctl start tunarr
   printf "${GN}✓ Tunarr updated and restarted.${CL}\n"
