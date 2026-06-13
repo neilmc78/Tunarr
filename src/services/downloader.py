@@ -49,7 +49,7 @@ async def search_youtube_music(query: str, limit: int = 5) -> list[dict]:
                 })
             return results
 
-    return await asyncio.get_event_loop().run_in_executor(None, _search)
+    return await asyncio.to_thread(_search)
 
 
 class ProgressHook:
@@ -129,7 +129,7 @@ async def download_track(
                 result["title"] = info.get("title", "")
                 result["duration"] = int((info.get("duration") or 0) * 1000)
 
-    await asyncio.get_event_loop().run_in_executor(None, _download)
+    await asyncio.to_thread(_download)
     return result
 
 
