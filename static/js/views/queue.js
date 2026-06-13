@@ -31,13 +31,15 @@ async function loadQueue() {
       return;
     }
     content.innerHTML = `
-      <table class="data-table"><thead><tr><th>Track</th><th>Artist</th><th>Album</th><th>Source</th><th>Status</th><th>Progress</th><th></th></tr></thead>
+      <table class="data-table"><thead><tr><th>Track</th><th>Artist</th><th>Album</th><th>Status</th><th>Progress</th><th></th></tr></thead>
       <tbody>${records.map(r => `
         <tr>
-          <td>${esc(r.trackTitle || r.title)}</td>
+          <td>
+            ${esc(r.trackTitle || r.title)}
+            ${r.status === 'failed' && r.errorMessage ? `<div class="queue-error">${esc(r.errorMessage)}</div>` : ''}
+          </td>
           <td class="text-muted">${esc(r.artistName)}</td>
           <td class="text-muted">${esc(r.albumTitle)}</td>
-          <td class="text-muted">${esc(r.protocol)}</td>
           <td>${statusBadgeForQueue(r.status)}</td>
           <td>${r.status === 'downloading' ? `<div class="progress-bar-container"><div class="progress-bar-fill" style="width:${r.progress}%"></div></div>` : `<span class="text-muted">${Math.round(r.progress)}%</span>`}</td>
           <td><button class="btn btn-sm btn-danger" onclick="removeFromQueue(${r.id})">✕</button></td>
