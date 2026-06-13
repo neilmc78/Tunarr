@@ -29,16 +29,24 @@ function renderArtistPage(container, artist, albums) {
           <span class="chip"><strong>${Math.round(stats.percentOfTracks || 0)}%</strong> complete</span>
           ${stats.missingTrackCount > 0 ? `<span class="chip text-danger"><strong>${stats.missingTrackCount}</strong> missing</span>` : ''}
         </div>
-        <div class="artist-header-actions">
+        <div class="artist-header-actions" id="artist-actions">
           <button class="btn btn-primary btn-sm" id="btn-search-all">Search All Missing</button>
           <button class="btn btn-secondary btn-sm" id="btn-refresh-artist">Refresh</button>
           <label class="toggle" title="Monitored"><input type="checkbox" id="toggle-artist-monitored" ${artist.monitored ? 'checked' : ''} /><span class="toggle-slider"></span></label>
           <span class="text-muted" style="font-size:12px;align-self:center">Monitored</span>
+          <button class="btn btn-danger btn-sm" id="btn-delete-artist" style="margin-left:auto">Delete Artist</button>
+        </div>
+        <div id="delete-confirm" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;padding:10px;border:1px solid var(--danger,#e05252);border-radius:6px;background:rgba(224,82,82,.08)">
+          <span style="font-size:13px">Delete <strong>${esc(artist.artistName)}</strong> from Tunarr?</span>
+          <button class="btn btn-danger btn-sm" id="btn-confirm-delete-keep">Remove (keep files)</button>
+          <button class="btn btn-danger btn-sm" id="btn-confirm-delete-files">Remove + delete files</button>
+          <button class="btn btn-secondary btn-sm" id="btn-cancel-delete">Cancel</button>
         </div>
       </div>
     </div>
     <div id="albums-container">${albums.length === 0 ? '<div class="empty-state"><div class="empty-state-icon">💿</div><div class="empty-state-title">No Albums</div><p>Click Refresh to fetch albums from MusicBrainz.</p></div>' : ''}</div>
   `;
+
   document.getElementById('toggle-artist-monitored').addEventListener('change', async function() {
     await API.updateArtist(artist.id, { monitored: this.checked }).catch(e => toast(e.message, 'error'));
   });
@@ -54,6 +62,26 @@ function renderArtistPage(container, artist, albums) {
       setTimeout(() => renderArtistDetailView(document.getElementById('view-container'), artist.id), 2000);
     } catch (e) { toast(e.message, 'error'); btn.disabled = false; btn.textContent = 'Refresh'; }
   });
+
+  // ── Delete flow ────────────────────────────────────────────────
+  document.getElementById('btn-delete-artist').addEventListener('click', () => {
+    document.getElementById('artist-actions').style.display  = 'none';
+    document.getElementById('delete-confirm').style.display  = 'flex';
+  });
+  document.getElementById('btn-cancel-delete').addEventListener('click', () => {
+    document.getElementById('delete-confirm').style.display  = 'none';
+    document.getElementById('artist-actions').style.display  = '';
+  });
+  const doDelete = async (deleteFiles) => {
+    try {
+      await API.deleteArtist(artist.id, deleteFiles);
+      toast(`${artist.artistName} removed`, 'success');
+      navigate('/artists');
+    } catch (e) { toast(e.message, 'error'); }
+  };
+  document.getElementById('btn-confirm-delete-keep').addEventListener('click',  () => doDelete(false));
+  document.getElementById('btn-confirm-delete-files').addEventListener('click', () => doDelete(true));
+
   const albumsContainer = document.getElementById('albums-container');
   albums.forEach(al => albumsContainer.appendChild(buildAlbumSection(al)));
 }
@@ -162,8 +190,8 @@ function closeTrackSearchModal() {
 
 async function openTrackSearchModal(track) {
   _trackSearchContext = track;
-  const modal = document.getElementById('modal-track-overlay');
-  const title = document.getElementById('track-search-title');
+  const modal   = document.getElementById('modal-track-overlay');
+  const title   = document.getElementById('track-search-title');
   const results = document.getElementById('track-search-results');
   title.textContent = `Search: "${track.title}"`;
   results.innerHTML = '<div class="loading-center"><div class="spinner"></div></div>';
@@ -181,9 +209,9 @@ async function openTrackSearchModal(track) {
 }
 
 function buildYTResult(result, track) {
-  const dur = formatDuration(result.duration || 0);
+  const dur   = formatDuration(result.duration || 0);
   const views = result.viewCount ? fmtViews(result.viewCount) : '';
-  const item = document.createElement('div');
+  const item  = document.createElement('div');
   item.className = 'search-result-item';
   item.innerHTML = `
     <div class="search-result-thumb">${result.thumbnailUrl ? `<img src="${result.thumbnailUrl}" alt="" loading="lazy" onerror="this.style.display='none'" />` : '🎵'}</div>

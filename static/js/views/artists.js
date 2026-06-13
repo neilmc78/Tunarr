@@ -36,6 +36,7 @@ function buildArtistCard(artist) {
   const pct = Math.round(stats.percentOfTracks || 0);
   const imgUrl = (artist.images || []).find(i => i.coverType === 'poster' || i.coverType === 'cover')?.remoteUrl;
   card.innerHTML = `
+    <button class="artist-card-delete" title="Remove artist" data-artist-id="${artist.id}" data-artist-name="${esc(artist.artistName)}">&times;</button>
     <div class="artist-card-art">${imgUrl ? `<img src="${imgUrl}" alt="${esc(artist.artistName)}" loading="lazy" onerror="this.style.display='none'" />` : '🎤'}</div>
     <div class="artist-card-info">
       <div class="artist-card-name" title="${esc(artist.artistName)}">${esc(artist.artistName)}</div>
@@ -43,8 +44,21 @@ function buildArtistCard(artist) {
       <div class="progress-wrap"><div class="progress-bar" style="width:${pct}%"></div></div>
     </div>
   `;
+  card.querySelector('.artist-card-delete').addEventListener('click', e => {
+    e.stopPropagation();
+    confirmDeleteArtistCard(artist.id, artist.artistName);
+  });
   card.addEventListener('click', () => navigate(`/artist/${artist.id}`));
   return card;
+}
+
+async function confirmDeleteArtistCard(id, name) {
+  if (!confirm(`Remove "${name}" from Tunarr?\n\nFiles on disk will NOT be deleted.`)) return;
+  try {
+    await API.deleteArtist(id, false);
+    toast(`${name} removed`, 'success');
+    loadArtists();
+  } catch (e) { toast(e.message, 'error'); }
 }
 
 function openAddArtistModal() {
@@ -70,7 +84,7 @@ function initAddArtistModal() {
 }
 
 async function doArtistSearch() {
-  const input = document.getElementById('artist-search-input');
+  const input   = document.getElementById('artist-search-input');
   const results = document.getElementById('artist-search-results');
   const term = input.value.trim();
   if (!term) return;
