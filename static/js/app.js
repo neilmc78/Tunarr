@@ -96,14 +96,36 @@ function initSidebar() {
   });
 }
 
-function init() {
+let _badgeInterval = null;
+
+async function initApp() {
+  const auth = await checkAuth();
+  const sidebar = document.getElementById('sidebar');
+  const mainContent = document.getElementById('main-content');
+
+  if (!auth.authenticated) {
+    sidebar.style.display = 'none';
+    renderLoginPage(mainContent);
+    return;
+  }
+
+  sidebar.style.display = '';
+  const userChip = document.getElementById('sidebar-user-chip');
+  if (userChip) {
+    userChip.querySelector('.sidebar-username').textContent = auth.username;
+    userChip.style.display = '';
+  }
+
   initSidebar();
   initAddArtistModal();
   initTrackSearchModal();
+  window.removeEventListener('hashchange', onHashChange);
   window.addEventListener('hashchange', onHashChange);
   onHashChange();
+
+  if (_badgeInterval) clearInterval(_badgeInterval);
   refreshBadges();
-  setInterval(refreshBadges, 15000);
+  _badgeInterval = setInterval(refreshBadges, 15000);
 }
 
 async function refreshBadges() {
@@ -137,4 +159,4 @@ API.grabDirect = async (trackId, albumId, artistId, sourceUrl, title) => {
   return resp.json();
 };
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', initApp);

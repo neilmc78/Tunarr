@@ -1,4 +1,5 @@
 import os
+import secrets
 from pathlib import Path
 from pydantic_settings import BaseSettings
 
@@ -25,6 +26,16 @@ class Settings(BaseSettings):
     @property
     def downloads_dir(self) -> str:
         return str(Path(self.data_dir) / "downloads")
+
+    def get_or_create_session_key(self) -> str:
+        """Return the persistent session signing secret, creating it on first run."""
+        key_path = Path(self.data_dir) / "session.key"
+        key_path.parent.mkdir(parents=True, exist_ok=True)
+        if key_path.exists():
+            return key_path.read_text().strip()
+        key = secrets.token_hex(32)
+        key_path.write_text(key)
+        return key
 
 
 settings = Settings()

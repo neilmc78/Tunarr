@@ -317,3 +317,108 @@ a:hover { color: var(--accent-hover); }
   /* Quality profile add form: single column */
   #new-qprofile-form > div { grid-template-columns: 1fr !important; }
 }
+
+/* ── Login / Setup page ───────────────────────────────────────────────────── */
+
+.login-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+  background: var(--bg-primary);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 36px 32px 32px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.4);
+}
+
+.login-logo {
+  font-size: 28px;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 6px;
+  color: var(--accent);
+  letter-spacing: -0.5px;
+}
+
+.login-title {
+  font-size: 17px;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+.login-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.login-error {
+  background: rgba(224,80,80,.12);
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--danger);
+  margin-bottom: 14px;
+}
+
+.login-card .form-group {
+  margin-bottom: 14px;
+}
+
+.login-btn {
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px;
+  font-size: 14px;
+}
+
+/* ── Sidebar user chip ────────────────────────────────────────────────────── */
+
+.sidebar-user-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: auto;
+}
+
+.sidebar-username {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-signout {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.btn-signout:hover {
+  color: var(--danger);
+  background: rgba(224,80,80,.1);
+}
+
+#sidebar.collapsed .sidebar-user-chip { justify-content: center; padding: 10px 0; }

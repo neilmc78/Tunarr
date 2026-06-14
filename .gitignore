@@ -8,3 +8,4 @@ __pycache__/
 .venv/
 .python_packages/
 *.egg-info/
+config/

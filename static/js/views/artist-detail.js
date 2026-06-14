@@ -37,8 +37,8 @@ function renderArtistPage(container, artist, albums) {
             <span class="text-muted" style="font-size:12px">Monitored</span>
           </span>
           <span style="flex:1"></span>
-          <button class="btn btn-secondary btn-sm" id="btn-link-artist">Link to MusicBrainz</button>
-          <button class="btn btn-danger btn-sm" id="btn-delete-artist">Delete Artist</button>
+          ${isAdmin() ? '<button class="btn btn-secondary btn-sm" id="btn-link-artist">Link to MusicBrainz</button>' : ''}
+          ${isAdmin() ? '<button class="btn btn-danger btn-sm" id="btn-delete-artist">Delete Artist</button>' : ''}
         </div>
         <div id="delete-confirm" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;padding:10px;border:1px solid var(--danger,#e05252);border-radius:6px;background:rgba(224,82,82,.08)">
           <span style="font-size:13px">Delete <strong>${esc(artist.artistName)}</strong> from Tunarr?</span>
@@ -67,26 +67,28 @@ function renderArtistPage(container, artist, albums) {
     } catch (e) { toast(e.message, 'error'); btn.disabled = false; btn.textContent = 'Refresh'; }
   });
 
-  document.getElementById('btn-link-artist').addEventListener('click', () => openLinkArtistModal(artist.id));
+  if (isAdmin()) {
+    document.getElementById('btn-link-artist').addEventListener('click', () => openLinkArtistModal(artist.id));
 
-  // ── Delete flow ────────────────────────────────────────────────
-  document.getElementById('btn-delete-artist').addEventListener('click', () => {
-    document.getElementById('artist-actions').style.display  = 'none';
-    document.getElementById('delete-confirm').style.display  = 'flex';
-  });
-  document.getElementById('btn-cancel-delete').addEventListener('click', () => {
-    document.getElementById('delete-confirm').style.display  = 'none';
-    document.getElementById('artist-actions').style.display  = '';
-  });
-  const doDelete = async (deleteFiles) => {
-    try {
-      await API.deleteArtist(artist.id, deleteFiles);
-      toast(`${artist.artistName} removed`, 'success');
-      navigate('/artists');
-    } catch (e) { toast(e.message, 'error'); }
-  };
-  document.getElementById('btn-confirm-delete-keep').addEventListener('click',  () => doDelete(false));
-  document.getElementById('btn-confirm-delete-files').addEventListener('click', () => doDelete(true));
+    // ── Delete flow ──────────────────────────────────────────────
+    document.getElementById('btn-delete-artist').addEventListener('click', () => {
+      document.getElementById('artist-actions').style.display  = 'none';
+      document.getElementById('delete-confirm').style.display  = 'flex';
+    });
+    document.getElementById('btn-cancel-delete').addEventListener('click', () => {
+      document.getElementById('delete-confirm').style.display  = 'none';
+      document.getElementById('artist-actions').style.display  = '';
+    });
+    const doDelete = async (deleteFiles) => {
+      try {
+        await API.deleteArtist(artist.id, deleteFiles);
+        toast(`${artist.artistName} removed`, 'success');
+        navigate('/artists');
+      } catch (e) { toast(e.message, 'error'); }
+    };
+    document.getElementById('btn-confirm-delete-keep').addEventListener('click',  () => doDelete(false));
+    document.getElementById('btn-confirm-delete-files').addEventListener('click', () => doDelete(true));
+  }
 
   const albumsContainer = document.getElementById('albums-container');
   albums.forEach(al => albumsContainer.appendChild(buildAlbumSection(al)));

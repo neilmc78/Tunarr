@@ -1,19 +1,16 @@
 async function renderSettingsView(container) {
   container.innerHTML = `<div class="page-header"><h1 class="page-title">Settings</h1></div><div id="settings-body"><div class="loading-center"><div class="spinner"></div></div></div>`;
   try {
-    const [folders, profiles, status, qualityDefs] = await Promise.all([
-      API.getRootFolders(),
-      API.getQProfiles(),
-      API.getStatus(),
-      API.getQualityDefs(),
-    ]);
-    renderSettingsBody(document.getElementById('settings-body'), folders, profiles, status, qualityDefs);
+    const reqs = [API.getRootFolders(), API.getQProfiles(), API.getStatus(), API.getQualityDefs()];
+    if (isAdmin()) reqs.push(API.listUsers());
+    const [folders, profiles, status, qualityDefs, users] = await Promise.all(reqs);
+    renderSettingsBody(document.getElementById('settings-body'), folders, profiles, status, qualityDefs, users || []);
   } catch (err) {
     document.getElementById('settings-body').innerHTML = `<p class="text-danger">Failed to load settings: ${err.message}</p>`;
   }
 }
 
-function renderSettingsBody(body, folders, profiles, status, qualityDefs) {
+function renderSettingsBody(body, folders, profiles, status, qualityDefs, users) {
   const qDefMap = {};
   (qualityDefs || []).forEach(q => { qDefMap[q.id] = q.name; });
 
@@ -86,6 +83,29 @@ function renderSettingsBody(body, folders, profiles, status, qualityDefs) {
       <button class="btn btn-secondary btn-sm" style="margin-top:12px" id="btn-add-qprofile">+ Add Profile</button>
     </div>
 
+    <!-- ── Users (admin only) ─────────────────────────────────────── -->
+    ${isAdmin() ? `
+    <div class="settings-section">
+      <h3>Users</h3>
+      <ul class="root-folder-list" id="users-list">
+        ${(users || []).map(u => `
+          <li class="root-folder-item">
+            <span class="root-folder-path">${esc(u.username)}</span>
+            <span class="badge" style="background:${u.role === 'admin' ? 'var(--accent)' : 'var(--bg-tertiary)'};color:var(--text)">${u.role}</span>
+            ${u.username !== (authUser()?.username) ? `<button class="btn btn-sm btn-danger" onclick="deleteUserAccount(${u.id}, '${esc(u.username)}')">Remove</button>` : '<span class="text-muted" style="font-size:12px">you</span>'}
+          </li>`).join('')}
+      </ul>
+      <div id="new-user-form-wrap">
+        <button class="btn btn-secondary btn-sm" id="btn-show-add-user" style="margin-top:8px">+ Add User</button>
+        <div id="new-user-form" style="display:none;margin-top:10px;display:none;gap:8px;align-items:flex-end;flex-wrap:wrap">
+          <input type="text" class="form-input" id="new-user-name" placeholder="Username" style="max-width:180px" autocomplete="off" />
+          <input type="password" class="form-input" id="new-user-pw" placeholder="Password" style="max-width:180px" autocomplete="new-password" />
+          <button class="btn btn-primary btn-sm" id="btn-save-user">Add</button>
+          <button class="btn btn-secondary btn-sm" id="btn-cancel-user">Cancel</button>
+        </div>
+      </div>
+    </div>` : ''}
+
     <!-- ── System ───────────────────────────────────────────────────── -->
     <div class="settings-section">
       <h3>System</h3>
@@ -97,6 +117,26 @@ function renderSettingsBody(body, folders, profiles, status, qualityDefs) {
       </div>
     </div>
   `;
+
+  // ── User management ────────────────────────────────────────────────────
+  if (isAdmin()) {
+    const showAddUser = document.getElementById('btn-show-add-user');
+    const userForm    = document.getElementById('new-user-form');
+    if (showAddUser && userForm) {
+      showAddUser.addEventListener('click', () => {
+        userForm.style.display = 'flex';
+        showAddUser.style.display = 'none';
+        document.getElementById('new-user-name').focus();
+      });
+      document.getElementById('btn-cancel-user').addEventListener('click', () => {
+        userForm.style.display = 'none';
+        showAddUser.style.display = '';
+      });
+      document.getElementById('btn-save-user').addEventListener('click', addUserAccount);
+      document.getElementById('new-user-name').addEventListener('keydown', e => { if (e.key === 'Enter') addUserAccount(); });
+      document.getElementById('new-user-pw').addEventListener('keydown',   e => { if (e.key === 'Enter') addUserAccount(); });
+    }
+  }
 
   // ── Folder handlers ────────────────────────────────────────────────────
   document.getElementById('btn-add-folder').addEventListener('click', addRootFolder);
@@ -113,6 +153,27 @@ function renderSettingsBody(body, folders, profiles, status, qualityDefs) {
   });
   document.getElementById('btn-cancel-qprofile').addEventListener('click', cancelQProfileForm);
   document.getElementById('btn-save-qprofile').addEventListener('click', saveQProfile);
+}
+
+// ── User management helpers ───────────────────────────────────────────────
+async function addUserAccount() {
+  const username = (document.getElementById('new-user-name')?.value || '').trim();
+  const password = document.getElementById('new-user-pw')?.value || '';
+  if (!username || !password) { toast('Username and password required', 'error'); return; }
+  try {
+    await API.authRegister(username, password);
+    toast(`User "${username}" added`, 'success');
+    renderSettingsView(document.getElementById('view-container'));
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteUserAccount(id, username) {
+  if (!confirm(`Remove user "${username}"?`)) return;
+  try {
+    await API.deleteUser(id);
+    toast(`User "${username}" removed`, 'success');
+    renderSettingsView(document.getElementById('view-container'));
+  } catch (e) { toast(e.message, 'error'); }
 }
 
 // ── Root folder helpers ────────────────────────────────────────────────────

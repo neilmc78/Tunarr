@@ -65,5 +65,13 @@ const API = (() => {
     getQualityDefs:   ()       => API.get('/api/v3/qualitydefinition'),
 
     getStatus:        ()       => API.get('/api/v3/system/status'),
+
+    authStatus:   ()              => API.get('/api/v3/auth/status'),
+    authLogin:    (username, pw)  => API.post('/api/v3/auth/login',    { username, password: pw }),
+    authLogout:   ()              => API.post('/api/v3/auth/logout',   {}),
+    authRegister: (username, pw)  => API.post('/api/v3/auth/register', { username, password: pw }),
+    authMe:       ()              => API.get('/api/v3/auth/me'),
+    listUsers:    ()              => API.get('/api/v3/auth/users'),
+    deleteUser:   (id)            => API.delete(`/api/v3/auth/users/${id}`),
   };
 })();

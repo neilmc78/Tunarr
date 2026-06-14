@@ -19,25 +19,30 @@ function renderArtistsView(container) {
 function _renderHdrBtns() {
   const wrap = document.getElementById('artists-hdr-btns');
   if (!wrap) return;
+  const admin = isAdmin();
   if (_selectMode) {
     const n = _selectedIds.size;
     wrap.innerHTML = `
-      <button class="btn btn-primary" id="btn-add-artist">+ Add Artist</button>
-      ${n > 0 ? `<button class="btn btn-danger" id="btn-delete-sel">Delete (${n})</button>` : ''}
+      ${admin ? '<button class="btn btn-primary" id="btn-add-artist">+ Add Artist</button>' : ''}
+      ${admin && n > 0 ? `<button class="btn btn-danger" id="btn-delete-sel">Delete (${n})</button>` : ''}
       <button class="btn btn-secondary" id="btn-sel-all">Select All</button>
       <button class="btn btn-secondary" id="btn-sel-done">Done</button>
     `;
-    document.getElementById('btn-add-artist').addEventListener('click', openAddArtistModal);
-    if (n > 0) document.getElementById('btn-delete-sel').addEventListener('click', deleteSelectedArtists);
+    if (admin) {
+      document.getElementById('btn-add-artist').addEventListener('click', openAddArtistModal);
+      if (n > 0) document.getElementById('btn-delete-sel').addEventListener('click', deleteSelectedArtists);
+    }
     document.getElementById('btn-sel-all').addEventListener('click', selectAllArtists);
     document.getElementById('btn-sel-done').addEventListener('click', exitSelectMode);
   } else {
     wrap.innerHTML = `
-      <button class="btn btn-primary" id="btn-add-artist">+ Add Artist</button>
-      <button class="btn btn-secondary" id="btn-select-mode">Select</button>
+      ${admin ? '<button class="btn btn-primary" id="btn-add-artist">+ Add Artist</button>' : ''}
+      ${admin ? '<button class="btn btn-secondary" id="btn-select-mode">Select</button>' : ''}
     `;
-    document.getElementById('btn-add-artist').addEventListener('click', openAddArtistModal);
-    document.getElementById('btn-select-mode').addEventListener('click', enterSelectMode);
+    if (admin) {
+      document.getElementById('btn-add-artist').addEventListener('click', openAddArtistModal);
+      document.getElementById('btn-select-mode').addEventListener('click', enterSelectMode);
+    }
   }
 }
 

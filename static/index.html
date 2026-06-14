@@ -33,6 +33,11 @@
         </a>
       </nav>
       <button class="sidebar-toggle" id="sidebar-toggle" title="Collapse sidebar">«</button>
+      <div class="sidebar-user-chip" id="sidebar-user-chip" style="display:none">
+        <span class="nav-icon">👤</span>
+        <span class="sidebar-username sidebar-label"></span>
+        <button class="btn-signout sidebar-label" onclick="logout()" title="Sign out">↩</button>
+      </div>
     </aside>
 
     <main id="main-content">
@@ -71,6 +76,7 @@
   <div id="toast-container"></div>
 
   <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/auth.js"></script>
   <script src="/assets/js/views/artists.js"></script>
   <script src="/assets/js/views/artist-detail.js"></script>
   <script src="/assets/js/views/queue.js"></script>

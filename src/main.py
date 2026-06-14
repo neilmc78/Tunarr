@@ -5,14 +5,17 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.requests import Request
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
 from .config import settings
 from .database import init_db, SessionLocal
-from .models import QualityProfile
+from .models import QualityProfile, User
 from .schemas import QUALITY_DEFINITIONS
 from .download_manager import process_pending_queue
-from .api import artist, album, track, command, queue, history, wanted, settings as settings_api, system, search
+from .api import artist, album, track, command, queue, history, wanted, settings as settings_api, system, search, auth
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("tunarr")
@@ -74,6 +77,34 @@ def _seed_quality_profiles():
         db.close()
 
 
+_session_key = settings.get_or_create_session_key()
+
+
+class _AuthMiddleware(BaseHTTPMiddleware):
+    """Block unauthenticated access to all /api/v3/ routes except /api/v3/auth/*."""
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if not path.startswith("/api/v3/") or path.startswith("/api/v3/auth"):
+            return await call_next(request)
+
+        uid = request.session.get("user_id")
+        if not uid:
+            return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+
+        db = SessionLocal()
+        try:
+            user = db.get(User, uid)
+            if not user:
+                request.session.clear()
+                return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+            if request.method not in ("GET", "HEAD", "OPTIONS") and user.role != "admin":
+                return JSONResponse({"detail": "Admin required"}, status_code=403)
+        finally:
+            db.close()
+
+        return await call_next(request)
+
+
 app = FastAPI(
     title="Tunarr",
     description="Individual track download manager — Sonarr for music tracks",
@@ -81,7 +112,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Middleware order: SessionMiddleware runs first (outermost), then _AuthMiddleware.
+# add_middleware prepends, so add _AuthMiddleware first, then SessionMiddleware.
+app.add_middleware(_AuthMiddleware)
+app.add_middleware(SessionMiddleware, secret_key=_session_key, https_only=False, same_site="lax")
+
 for r in [
+    auth.router,
     artist.router,
     album.router,
     track.router,
