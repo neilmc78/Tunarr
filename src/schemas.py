@@ -385,3 +385,7 @@ class ArtistLookup(BaseModel):
     images: list[dict] = []
     links: list[dict] = []
     genres: list[str] = []
+
+
+class ArtistLink(BaseModel):
+    musicBrainzId: str

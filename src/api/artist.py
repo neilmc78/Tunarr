@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Artist, Album, Track, QualityProfile, TrackFile
-from ..schemas import ArtistOut, ArtistIn, ArtistUpdate, ArtistLookup
+from ..schemas import ArtistOut, ArtistIn, ArtistUpdate, ArtistLookup, ArtistLink
 from ..services import musicbrainz as mb
 from ..services import tadb
 
@@ -173,6 +173,81 @@ def delete_artist(artist_id: int, deleteFiles: bool = False, db: Session = Depen
     db.delete(a)
     db.commit()
     return {}
+
+
+@router.post("/{artist_id}/link", response_model=ArtistOut)
+async def link_artist(artist_id: int, body: ArtistLink, db: Session = Depends(get_db)):
+    """Link a locally-scanned artist stub to a MusicBrainz identity."""
+    a = db.get(Artist, artist_id)
+    if not a:
+        raise HTTPException(404, "Artist not found")
+
+    collision = db.query(Artist).filter(
+        Artist.musicbrainz_id == body.musicBrainzId,
+        Artist.id != artist_id,
+    ).first()
+    if collision:
+        raise HTTPException(409, f"MusicBrainz ID already linked to '{collision.name}'")
+
+    try:
+        mb_data = await mb.get_artist(body.musicBrainzId)
+    except Exception as e:
+        raise HTTPException(502, f"MusicBrainz lookup failed: {e}")
+
+    tadb_url = await tadb.get_artist_image(body.musicBrainzId)
+    mb_images = mb_data.get("images", [])
+    if tadb_url and not any(i.get("remoteUrl") == tadb_url for i in mb_images):
+        mb_images = [{"coverType": "poster", "remoteUrl": tadb_url}] + list(mb_images)
+
+    real_name = mb_data.get("artistName") or a.name
+    a.musicbrainz_id = body.musicBrainzId
+    a.name           = real_name
+    a.sort_name      = mb_data.get("sortName") or a.sort_name
+    a.disambiguation = mb_data.get("disambiguation", "")
+    a.overview       = mb_data.get("overview", "")
+    a.status         = mb_data.get("status", a.status)
+    a.artist_type    = mb_data.get("artistType", "")
+    a.images         = json.dumps(mb_images)
+    a.links          = json.dumps(mb_data.get("links", []))
+    a.genres         = json.dumps(mb_data.get("genres", []))
+
+    existing_by_mbid  = {al.musicbrainz_id: al for al in a.albums}
+    existing_by_title = {al.title.lower(): al  for al in a.albums}
+
+    for rg in mb_data.get("releaseGroups", []):
+        real_mbid = rg["musicBrainzId"]
+        title     = rg["title"]
+
+        if real_mbid in existing_by_mbid:
+            al = existing_by_mbid[real_mbid]
+            al.album_type   = rg.get("albumType", al.album_type)
+            al.release_date = rg.get("releaseDate", al.release_date)
+            continue
+
+        stub_al = existing_by_title.get(title.lower())
+        if stub_al:
+            stub_al.musicbrainz_id = real_mbid
+            stub_al.album_type     = rg.get("albumType", stub_al.album_type)
+            stub_al.release_date   = rg.get("releaseDate", stub_al.release_date)
+            existing_by_mbid[real_mbid] = stub_al
+        else:
+            db.add(Album(
+                musicbrainz_id=real_mbid,
+                artist_id=a.id,
+                title=title,
+                album_type=rg.get("albumType", "Album"),
+                secondary_types=json.dumps(rg.get("secondaryTypes", [])),
+                release_date=rg.get("releaseDate", ""),
+                monitored=False,
+                images=json.dumps([]),
+                links=json.dumps([]),
+                genres=json.dumps([]),
+                labels=json.dumps([]),
+            ))
+
+    db.commit()
+    db.refresh(a)
+    return ArtistOut.from_orm_artist(a)
 
 
 @router.get("/lookup/search", response_model=list[ArtistLookup])

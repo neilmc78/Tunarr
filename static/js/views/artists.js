@@ -1,5 +1,6 @@
 let _selectMode = false;
 const _selectedIds = new Set();
+let _linkTargetArtistId = null;
 
 function renderArtistsView(container) {
   container.innerHTML = `
@@ -155,6 +156,19 @@ function buildArtistCard(artist) {
 }
 
 function openAddArtistModal() {
+  _linkTargetArtistId = null;
+  const title = document.getElementById('modal-artist-title');
+  if (title) title.textContent = 'Add Artist';
+  document.getElementById('modal-overlay').classList.remove('hidden');
+  document.getElementById('artist-search-input').value = '';
+  document.getElementById('artist-search-results').innerHTML = '';
+  setTimeout(() => document.getElementById('artist-search-input').focus(), 50);
+}
+
+function openLinkArtistModal(artistId) {
+  _linkTargetArtistId = artistId;
+  const title = document.getElementById('modal-artist-title');
+  if (title) title.textContent = 'Link to MusicBrainz';
   document.getElementById('modal-overlay').classList.remove('hidden');
   document.getElementById('artist-search-input').value = '';
   document.getElementById('artist-search-results').innerHTML = '';
@@ -162,6 +176,7 @@ function openAddArtistModal() {
 }
 
 function closeAddArtistModal() {
+  _linkTargetArtistId = null;
   document.getElementById('modal-overlay').classList.add('hidden');
 }
 
@@ -186,6 +201,7 @@ async function doArtistSearch() {
     const data = await API.searchArtists(term);
     if (!data || data.length === 0) { results.innerHTML = '<p class="text-muted" style="text-align:center;padding:20px">No results found.</p>'; return; }
     results.innerHTML = '';
+    const linkId = _linkTargetArtistId;
     data.forEach(a => {
       const item = document.createElement('div');
       item.className = 'search-result-item';
@@ -195,9 +211,9 @@ async function doArtistSearch() {
           <div class="search-result-name">${esc(a.artistName)}</div>
           <div class="search-result-sub">${esc(a.artistType || '')} ${a.disambiguation ? '· ' + esc(a.disambiguation) : ''}</div>
         </div>
-        <div class="search-result-actions"><button class="btn btn-primary btn-sm">Add</button></div>
+        <div class="search-result-actions"><button class="btn btn-primary btn-sm">${linkId ? 'Link' : 'Add'}</button></div>
       `;
-      item.querySelector('button').addEventListener('click', () => addArtist(a));
+      item.querySelector('button').addEventListener('click', () => linkId ? linkArtistToMB(a, linkId) : addArtist(a));
       results.appendChild(item);
     });
   } catch (err) {
@@ -215,5 +231,18 @@ async function addArtist(a) {
     loadArtists();
   } catch (err) {
     toast('Failed to add artist: ' + err.message, 'error');
+  }
+}
+
+async function linkArtistToMB(a, artistId) {
+  try {
+    await API.linkArtist(artistId, a.musicBrainzId);
+    toast(`Linked to MusicBrainz: ${a.artistName}`, 'success');
+    closeAddArtistModal();
+    // Reload the artist detail page if we're still on it
+    const container = document.getElementById('view-container');
+    if (container) renderArtistDetailView(container, artistId);
+  } catch (err) {
+    toast('Link failed: ' + err.message, 'error');
   }
 }

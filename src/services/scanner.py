@@ -1,11 +1,23 @@
 import json
 import logging
 import os
+import re
 from pathlib import Path
 
 logger = logging.getLogger("tunarr.scanner")
 
 AUDIO_EXTENSIONS = {'.mp3', '.flac', '.m4a', '.ogg', '.opus', '.aac', '.wav'}
+
+# Splits "Artist, Guest" / "Artist feat. Guest" / "Artist & Guest" etc.
+_COLLAB_RE = re.compile(
+    r'\s*(?:[,;/]|\bfeat\.?\b|\bft\.?\b|\bvs\.?\b|\bwith\b|\b&\b)\s*',
+    re.IGNORECASE,
+)
+
+
+def _primary_artist(raw: str) -> str:
+    """Return only the first/primary artist from a collaboration string."""
+    return _COLLAB_RE.split(raw.strip())[0].strip()
 
 
 def _read_tags(filepath: str) -> dict:
@@ -29,8 +41,14 @@ def _read_tags(filepath: str) -> dict:
 
         tn_raw = _get('tracknumber', '0').split('/')[0].strip()
 
+        # Prefer albumartist (TPE2) — always the main artist for the album.
+        # Fall back to stripping collaborators from the track artist tag (TPE1).
+        album_artist = _get('albumartist', '').strip()
+        track_artist = _get('artist', '').strip()
+        primary = album_artist or _primary_artist(track_artist)
+
         return {
-            'artist':       _get('artist') or _get('albumartist', ''),
+            'artist':       primary,
             'album':        _get('album', 'Unknown Album'),
             'title':        _get('title', Path(filepath).stem),
             'track_number': tn_raw,
@@ -93,9 +111,17 @@ def scan_root_folder(root_path: str) -> dict:
             track_title  = (tags.get('title')  or Path(filepath).stem).strip()
 
             if not artist_name:
-                logger.debug("No artist tag, skipping %s", filepath)
-                stats['skipped'] += 1
-                continue
+                # Fall back to directory structure: <root>/<Artist>/<Album>/file
+                rel_parts = Path(filepath).relative_to(root_path).parts
+                if len(rel_parts) >= 2:
+                    artist_name = rel_parts[0].strip()
+                    if not tags.get('album') or tags.get('album') == 'Unknown Album':
+                        album_title = rel_parts[1].strip()
+                    logger.debug("No artist tag, using folder fallback: %s / %s", artist_name, album_title)
+                if not artist_name:
+                    logger.debug("No artist tag and no folder info, skipping %s", filepath)
+                    stats['skipped'] += 1
+                    continue
 
             # ── Artist ──────────────────────────────────────────────────
             artist = db.query(Artist).filter(

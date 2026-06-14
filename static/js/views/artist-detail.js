@@ -37,6 +37,7 @@ function renderArtistPage(container, artist, albums) {
             <span class="text-muted" style="font-size:12px">Monitored</span>
           </span>
           <span style="flex:1"></span>
+          <button class="btn btn-secondary btn-sm" id="btn-link-artist">Link to MusicBrainz</button>
           <button class="btn btn-danger btn-sm" id="btn-delete-artist">Delete Artist</button>
         </div>
         <div id="delete-confirm" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;padding:10px;border:1px solid var(--danger,#e05252);border-radius:6px;background:rgba(224,82,82,.08)">
@@ -65,6 +66,8 @@ function renderArtistPage(container, artist, albums) {
       setTimeout(() => renderArtistDetailView(document.getElementById('view-container'), artist.id), 2000);
     } catch (e) { toast(e.message, 'error'); btn.disabled = false; btn.textContent = 'Refresh'; }
   });
+
+  document.getElementById('btn-link-artist').addEventListener('click', () => openLinkArtistModal(artist.id));
 
   // ── Delete flow ────────────────────────────────────────────────
   document.getElementById('btn-delete-artist').addEventListener('click', () => {

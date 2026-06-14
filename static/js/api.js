@@ -22,6 +22,7 @@ const API = (() => {
     getArtist:       (id)    => API.get(`/api/v3/artist/${id}`),
     searchArtists:   (term)  => API.get(`/api/v3/artist/lookup/search?term=${encodeURIComponent(term)}`),
     addArtist:       (body)  => API.post('/api/v3/artist', body),
+    linkArtist:      (id, mbid) => API.post(`/api/v3/artist/${id}/link`, { musicBrainzId: mbid }),
     updateArtist:    (id, b) => API.put(`/api/v3/artist/${id}`, b),
     deleteArtist:    (id, df)=> API.delete(`/api/v3/artist/${id}?deleteFiles=${!!df}`),
     getArtistImage:  (id)    => API.get(`/api/v3/artist/${id}/image`),
