@@ -181,3 +181,22 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     role = Column(String, default="user")   # "admin" or "user"
     created_at = Column(DateTime, default=func.now())
+
+
+class ArtistRequest(Base):
+    __tablename__ = "artist_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    mb_artist_id = Column(String, nullable=True)
+    artist_name = Column(String, nullable=False)
+    artist_type = Column(String, default="")
+    disambiguation = Column(String, default="")
+    images = Column(_JsonColumn, default="[]")
+    requested_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    status = Column(String, default="pending")  # pending / approved / rejected
+    created_at = Column(DateTime, default=func.now())
+    reviewed_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+
+    requested_by = relationship("User", foreign_keys=[requested_by_id])
+    reviewed_by = relationship("User", foreign_keys=[reviewed_by_id])

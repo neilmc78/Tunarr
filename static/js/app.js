@@ -28,6 +28,7 @@ const routes = {
   '/queue':                            renderQueueView,
   '/wanted':                           renderWantedView,
   '/history':                          renderHistoryView,
+  '/requests':                         renderRequestsView,
   '/settings':                         renderSettingsView,
 };
 
@@ -122,6 +123,10 @@ async function initApp() {
     userChip.style.display = '';
   }
 
+  // Hide Settings nav for non-admins
+  const navSettings = document.getElementById('nav-settings');
+  if (navSettings) navSettings.style.display = auth.role === 'admin' ? '' : 'none';
+
   initSidebar();
   initAddArtistModal();
   initTrackSearchModal();
@@ -136,12 +141,16 @@ async function initApp() {
 
 async function refreshBadges() {
   try {
-    const [queueData, wantedData] = await Promise.all([
+    const fetches = [
       API.getQueue().catch(() => null),
       API.getMissing(1, 1).catch(() => null),
-    ]);
+    ];
+    if (isAdmin()) fetches.push(API.getPendingCount().catch(() => null));
+    const [queueData, wantedData, requestsData] = await Promise.all(fetches);
+
     const badge_q = document.getElementById('badge-queue');
     const badge_w = document.getElementById('badge-wanted');
+    const badge_r = document.getElementById('badge-requests');
     if (badge_q && queueData) {
       const active = (queueData.records || []).filter(r => r.status !== 'completed').length;
       badge_q.textContent = active;
@@ -151,6 +160,11 @@ async function refreshBadges() {
       const count = wantedData.totalRecords || 0;
       badge_w.textContent = count;
       badge_w.style.display = count > 0 ? '' : 'none';
+    }
+    if (badge_r && requestsData) {
+      const count = requestsData.count || 0;
+      badge_r.textContent = count;
+      badge_r.style.display = count > 0 ? '' : 'none';
     }
   } catch {}
 }

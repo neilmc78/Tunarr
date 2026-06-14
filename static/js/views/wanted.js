@@ -9,7 +9,7 @@ async function renderWantedView(container) {
   container.innerHTML = `
     <div class="page-header">
       <h1 class="page-title">Wanted</h1>
-      <button class="btn btn-primary btn-sm" id="btn-search-all-missing">Search All</button>
+      ${isAdmin() ? '<button class="btn btn-primary btn-sm" id="btn-search-all-missing">Search All</button>' : ''}
     </div>
     <div style="margin-bottom:14px">
       <input type="text" id="wanted-search" class="form-input" placeholder="Filter by title, album, or artist…" style="max-width:420px" />
@@ -27,7 +27,8 @@ async function renderWantedView(container) {
     }, 300);
   });
 
-  document.getElementById('btn-search-all-missing').addEventListener('click', searchAllMissing);
+  const searchAllBtn = document.getElementById('btn-search-all-missing');
+  if (searchAllBtn) searchAllBtn.addEventListener('click', searchAllMissing);
   loadMissing();
 }
 
@@ -78,9 +79,10 @@ async function loadMissing() {
     ]);
 
     const start = (_wantedPage - 1) * _wantedPageSize + 1;
+    const admin = isAdmin();
     content.innerHTML = `
       <table class="data-table">
-        <thead><tr><th>#</th><th>Track</th><th>Artist</th><th>Album</th><th>Duration</th><th></th></tr></thead>
+        <thead><tr><th>#</th><th>Track</th><th>Artist</th><th>Album</th><th>Duration</th>${admin ? '<th></th>' : ''}</tr></thead>
         <tbody>${records.map((t, i) => `
           <tr>
             <td class="text-muted">${start + i}</td>
@@ -88,15 +90,17 @@ async function loadMissing() {
             <td class="text-muted">${esc(artistMap[t.artistId]?.artistName || '')}</td>
             <td class="text-muted">${esc(albumMap[t.albumId]?.title || '')}</td>
             <td class="text-muted">${formatDuration(t.duration)}</td>
-            <td><button class="btn btn-sm btn-primary" data-track-id="${t.id}" data-track-title="${esc(t.title)}">Search</button></td>
+            ${admin ? `<td><button class="btn btn-sm btn-primary" data-track-id="${t.id}" data-track-title="${esc(t.title)}">Search</button></td>` : ''}
           </tr>`).join('')}
         </tbody>
       </table>
     `;
 
-    content.querySelectorAll('button[data-track-id]').forEach(btn => {
-      btn.addEventListener('click', () => wantedSearchTrack(+btn.dataset.trackId, btn.dataset.trackTitle));
-    });
+    if (admin) {
+      content.querySelectorAll('button[data-track-id]').forEach(btn => {
+        btn.addEventListener('click', () => wantedSearchTrack(+btn.dataset.trackId, btn.dataset.trackTitle));
+      });
+    }
 
     _renderWantedPagination(total);
   } catch (err) {

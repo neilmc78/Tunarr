@@ -15,7 +15,7 @@ from .database import init_db, SessionLocal
 from .models import QualityProfile, User
 from .schemas import QUALITY_DEFINITIONS
 from .download_manager import process_pending_queue
-from .api import artist, album, track, command, queue, history, wanted, settings as settings_api, system, search, auth
+from .api import artist, album, track, command, queue, history, wanted, settings as settings_api, system, search, auth, requests as requests_api
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("tunarr")
@@ -98,7 +98,15 @@ class _AuthMiddleware(BaseHTTPMiddleware):
                 request.session.clear()
                 return JSONResponse({"detail": "Not authenticated"}, status_code=401)
             if request.method not in ("GET", "HEAD", "OPTIONS") and user.role != "admin":
-                return JSONResponse({"detail": "Admin required"}, status_code=403)
+                # Allow non-admins to toggle monitoring on tracks/albums and submit requests
+                allowed = (
+                    (path.startswith("/api/v3/track/") and request.method == "PUT") or
+                    (path == "/api/v3/track/monitor" and request.method == "PUT") or
+                    (path.startswith("/api/v3/album/") and request.method == "PUT") or
+                    (path == "/api/v3/requests" and request.method == "POST")
+                )
+                if not allowed:
+                    return JSONResponse({"detail": "Admin required"}, status_code=403)
         finally:
             db.close()
 
@@ -119,6 +127,7 @@ app.add_middleware(SessionMiddleware, secret_key=_session_key, https_only=False,
 
 for r in [
     auth.router,
+    requests_api.router,
     artist.router,
     album.router,
     track.router,

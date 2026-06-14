@@ -30,42 +30,36 @@ function renderArtistPage(container, artist, albums) {
           ${stats.missingTrackCount > 0 ? `<span class="chip text-danger"><strong>${stats.missingTrackCount}</strong> missing</span>` : ''}
         </div>
       <div class="artist-header-actions" id="artist-actions">
-          <button class="btn btn-primary btn-sm" id="btn-search-all">Search All Missing</button>
-          <button class="btn btn-secondary btn-sm" id="btn-refresh-artist">Refresh</button>
-          <span style="display:inline-flex;align-items:center;gap:6px">
-            <label class="toggle" title="Monitored"><input type="checkbox" id="toggle-artist-monitored" ${artist.monitored ? 'checked' : ''} /><span class="toggle-slider"></span></label>
-            <span class="text-muted" style="font-size:12px">Monitored</span>
-          </span>
+          ${isAdmin() ? '<button class="btn btn-primary btn-sm" id="btn-search-all">Search All Missing</button>' : ''}
+          ${isAdmin() ? '<button class="btn btn-secondary btn-sm" id="btn-refresh-artist">Refresh</button>' : ''}
+          ${isAdmin() ? `<span style="display:inline-flex;align-items:center;gap:6px"><label class="toggle" title="Monitored"><input type="checkbox" id="toggle-artist-monitored" ${artist.monitored ? 'checked' : ''} /><span class="toggle-slider"></span></label><span class="text-muted" style="font-size:12px">Monitored</span></span>` : ''}
           <span style="flex:1"></span>
           ${isAdmin() ? '<button class="btn btn-secondary btn-sm" id="btn-link-artist">Link to MusicBrainz</button>' : ''}
           ${isAdmin() ? '<button class="btn btn-danger btn-sm" id="btn-delete-artist">Delete Artist</button>' : ''}
         </div>
-        <div id="delete-confirm" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;padding:10px;border:1px solid var(--danger,#e05252);border-radius:6px;background:rgba(224,82,82,.08)">
-          <span style="font-size:13px">Delete <strong>${esc(artist.artistName)}</strong> from Tunarr?</span>
-          <button class="btn btn-danger btn-sm" id="btn-confirm-delete-keep">Remove (keep files)</button>
-          <button class="btn btn-danger btn-sm" id="btn-confirm-delete-files">Remove + delete files</button>
-          <button class="btn btn-secondary btn-sm" id="btn-cancel-delete">Cancel</button>
-        </div>
+        ${isAdmin() ? `<div id="delete-confirm" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;padding:10px;border:1px solid var(--danger,#e05252);border-radius:6px;background:rgba(224,82,82,.08)"><span style="font-size:13px">Delete <strong>${esc(artist.artistName)}</strong> from Tunarr?</span><button class="btn btn-danger btn-sm" id="btn-confirm-delete-keep">Remove (keep files)</button><button class="btn btn-danger btn-sm" id="btn-confirm-delete-files">Remove + delete files</button><button class="btn btn-secondary btn-sm" id="btn-cancel-delete">Cancel</button></div>` : ''}
       </div>
     </div>
     <div id="albums-container">${albums.length === 0 ? '<div class="empty-state"><div class="empty-state-icon">💿</div><div class="empty-state-title">No Albums</div><p>Click Refresh to fetch albums from MusicBrainz.</p></div>' : ''}</div>
   `;
 
-  document.getElementById('toggle-artist-monitored').addEventListener('change', async function() {
-    await API.updateArtist(artist.id, { monitored: this.checked }).catch(e => toast(e.message, 'error'));
-  });
-  document.getElementById('btn-search-all').addEventListener('click', async () => {
-    try { await API.searchArtistMissing(artist.id); toast('Searching for all missing tracks…', 'info'); }
-    catch (e) { toast(e.message, 'error'); }
-  });
-  document.getElementById('btn-refresh-artist').addEventListener('click', async () => {
-    const btn = document.getElementById('btn-refresh-artist');
-    btn.disabled = true; btn.textContent = 'Refreshing…';
-    try {
-      await API.refreshArtist(artist.id); toast('Refresh queued', 'info');
-      setTimeout(() => renderArtistDetailView(document.getElementById('view-container'), artist.id), 2000);
-    } catch (e) { toast(e.message, 'error'); btn.disabled = false; btn.textContent = 'Refresh'; }
-  });
+  if (isAdmin()) {
+    document.getElementById('toggle-artist-monitored').addEventListener('change', async function() {
+      await API.updateArtist(artist.id, { monitored: this.checked }).catch(e => toast(e.message, 'error'));
+    });
+    document.getElementById('btn-search-all').addEventListener('click', async () => {
+      try { await API.searchArtistMissing(artist.id); toast('Searching for all missing tracks…', 'info'); }
+      catch (e) { toast(e.message, 'error'); }
+    });
+    document.getElementById('btn-refresh-artist').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-refresh-artist');
+      btn.disabled = true; btn.textContent = 'Refreshing…';
+      try {
+        await API.refreshArtist(artist.id); toast('Refresh queued', 'info');
+        setTimeout(() => renderArtistDetailView(document.getElementById('view-container'), artist.id), 2000);
+      } catch (e) { toast(e.message, 'error'); btn.disabled = false; btn.textContent = 'Refresh'; }
+    });
+  }
 
   if (isAdmin()) {
     document.getElementById('btn-link-artist').addEventListener('click', () => openLinkArtistModal(artist.id));
@@ -115,7 +109,7 @@ function buildAlbumSection(album) {
         <span class="text-muted" style="font-size:12px">${stats.trackFileCount || 0}/${stats.trackCount || 0} · ${pct}%</span>
         ${albumStatusBadge}
         <label class="toggle" title="Monitor album" onclick="event.stopPropagation()"><input type="checkbox" class="album-monitor-toggle" data-album-id="${album.id}" ${album.monitored ? 'checked' : ''} /><span class="toggle-slider"></span></label>
-        <button class="btn btn-sm btn-primary album-search-btn" data-album-id="${album.id}" onclick="event.stopPropagation()">Search</button>
+        ${isAdmin() ? `<button class="btn btn-sm btn-primary album-search-btn" data-album-id="${album.id}" onclick="event.stopPropagation()">Search</button>` : ''}
       </div>
       <span class="album-expand">›</span>
     </div>
@@ -149,10 +143,13 @@ function buildAlbumSection(album) {
   section.querySelector('.album-monitor-toggle').addEventListener('change', async function() {
     await API.updateAlbum(album.id, { monitored: this.checked }).catch(e => toast(e.message, 'error'));
   });
-  section.querySelector('.album-search-btn').addEventListener('click', async () => {
-    try { await API.searchAlbum(album.id); toast(`Searching for missing tracks in "${album.title}"…`, 'info'); }
-    catch (e) { toast(e.message, 'error'); }
-  });
+  const albumSearchBtn = section.querySelector('.album-search-btn');
+  if (albumSearchBtn) {
+    albumSearchBtn.addEventListener('click', async () => {
+      try { await API.searchAlbum(album.id); toast(`Searching for missing tracks in "${album.title}"…`, 'info'); }
+      catch (e) { toast(e.message, 'error'); }
+    });
+  }
   return section;
 }
 
@@ -194,7 +191,7 @@ function buildTrackRow(track) {
     <td class="track-status">${status}</td>
     <td class="track-actions">
       <label class="toggle" title="Monitor" style="vertical-align:middle"><input type="checkbox" class="track-monitor-chk" data-track-id="${track.id}" ${track.monitored ? 'checked' : ''} /><span class="toggle-slider"></span></label>
-      <button class="btn btn-sm ${track.hasFile ? 'btn-secondary' : 'btn-primary'} track-search-btn" data-track-id="${track.id}" style="margin-left:4px" title="${track.hasFile ? 'Re-download' : 'Download'}">⬇</button>
+      ${isAdmin() ? `<button class="btn btn-sm ${track.hasFile ? 'btn-secondary' : 'btn-primary'} track-search-btn" data-track-id="${track.id}" style="margin-left:4px" title="${track.hasFile ? 'Re-download' : 'Download'}">⬇</button>` : ''}
     </td>
   `;
   tr.querySelector('.track-monitor-chk').addEventListener('change', async function() {
@@ -202,7 +199,8 @@ function buildTrackRow(track) {
     track.monitored = this.checked;
     tr.replaceWith(buildTrackRow(track));
   });
-  tr.querySelector('.track-search-btn').addEventListener('click', () => openTrackSearchModal(track));
+  const trackSearchBtn = tr.querySelector('.track-search-btn');
+  if (trackSearchBtn) trackSearchBtn.addEventListener('click', () => openTrackSearchModal(track));
   return tr;
 }
 
@@ -296,7 +294,7 @@ async function renderAlbumTracksView(container, artistId, albumId) {
               : '<span class="chip text-success">Complete</span>'}
           </div>
           <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            ${album.anyTracksMissing ? '<button class="btn btn-primary btn-sm" id="alp-search-btn">Search Missing</button>' : ''}
+            ${isAdmin() && album.anyTracksMissing ? '<button class="btn btn-primary btn-sm" id="alp-search-btn">Search Missing</button>' : ''}
             <label class="toggle" title="Monitor album"><input type="checkbox" id="alp-monitor-chk" ${album.monitored ? 'checked' : ''} /><span class="toggle-slider"></span></label>
             <span class="text-muted" style="font-size:12px">Monitored</span>
           </div>

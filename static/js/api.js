@@ -66,6 +66,12 @@ const API = (() => {
 
     getStatus:        ()       => API.get('/api/v3/system/status'),
 
+    getRequests:          ()      => API.get('/api/v3/requests'),
+    getPendingCount:      ()      => API.get('/api/v3/requests/pending-count'),
+    createRequest:        (body)  => API.post('/api/v3/requests', body),
+    updateRequest:        (id, b) => API.put(`/api/v3/requests/${id}`, b),
+    deleteRequest:        (id)    => API.delete(`/api/v3/requests/${id}`),
+
     authStatus:   ()              => API.get('/api/v3/auth/status'),
     authLogin:    (username, pw)  => API.post('/api/v3/auth/login',    { username, password: pw }),
     authLogout:   ()              => API.post('/api/v3/auth/logout',   {}),

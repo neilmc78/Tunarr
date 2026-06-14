@@ -422,3 +422,9 @@ a:hover { color: var(--accent-hover); }
 }
 
 #sidebar.collapsed .sidebar-user-chip { justify-content: center; padding: 10px 0; }
+
+/* ── Requests view ────────────────────────────────────────────────────────── */
+
+.request-actions {
+  white-space: nowrap;
+}

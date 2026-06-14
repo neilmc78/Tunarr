@@ -36,12 +36,14 @@ function _renderHdrBtns() {
     document.getElementById('btn-sel-done').addEventListener('click', exitSelectMode);
   } else {
     wrap.innerHTML = `
-      ${admin ? '<button class="btn btn-primary" id="btn-add-artist">+ Add Artist</button>' : ''}
+      ${admin ? '<button class="btn btn-primary" id="btn-add-artist">+ Add Artist</button>' : '<button class="btn btn-primary" id="btn-request-artist">Request Artist</button>'}
       ${admin ? '<button class="btn btn-secondary" id="btn-select-mode">Select</button>' : ''}
     `;
     if (admin) {
       document.getElementById('btn-add-artist').addEventListener('click', openAddArtistModal);
       document.getElementById('btn-select-mode').addEventListener('click', enterSelectMode);
+    } else {
+      document.getElementById('btn-request-artist').addEventListener('click', openRequestArtistModal);
     }
   }
 }
@@ -160,10 +162,24 @@ function buildArtistCard(artist) {
   return card;
 }
 
+let _requestMode = false;
+
 function openAddArtistModal() {
   _linkTargetArtistId = null;
+  _requestMode = false;
   const title = document.getElementById('modal-artist-title');
   if (title) title.textContent = 'Add Artist';
+  document.getElementById('modal-overlay').classList.remove('hidden');
+  document.getElementById('artist-search-input').value = '';
+  document.getElementById('artist-search-results').innerHTML = '';
+  setTimeout(() => document.getElementById('artist-search-input').focus(), 50);
+}
+
+function openRequestArtistModal() {
+  _linkTargetArtistId = null;
+  _requestMode = true;
+  const title = document.getElementById('modal-artist-title');
+  if (title) title.textContent = 'Request Artist';
   document.getElementById('modal-overlay').classList.remove('hidden');
   document.getElementById('artist-search-input').value = '';
   document.getElementById('artist-search-results').innerHTML = '';
@@ -182,6 +198,7 @@ function openLinkArtistModal(artistId) {
 
 function closeAddArtistModal() {
   _linkTargetArtistId = null;
+  _requestMode = false;
   document.getElementById('modal-overlay').classList.add('hidden');
 }
 
@@ -207,18 +224,24 @@ async function doArtistSearch() {
     if (!data || data.length === 0) { results.innerHTML = '<p class="text-muted" style="text-align:center;padding:20px">No results found.</p>'; return; }
     results.innerHTML = '';
     const linkId = _linkTargetArtistId;
+    const reqMode = _requestMode;
     data.forEach(a => {
       const item = document.createElement('div');
       item.className = 'search-result-item';
+      const btnLabel = linkId ? 'Link' : reqMode ? 'Request' : 'Add';
       item.innerHTML = `
         <div class="search-result-thumb">🎤</div>
         <div class="search-result-info">
           <div class="search-result-name">${esc(a.artistName)}</div>
           <div class="search-result-sub">${esc(a.artistType || '')} ${a.disambiguation ? '· ' + esc(a.disambiguation) : ''}</div>
         </div>
-        <div class="search-result-actions"><button class="btn btn-primary btn-sm">${linkId ? 'Link' : 'Add'}</button></div>
+        <div class="search-result-actions"><button class="btn btn-primary btn-sm">${btnLabel}</button></div>
       `;
-      item.querySelector('button').addEventListener('click', () => linkId ? linkArtistToMB(a, linkId) : addArtist(a));
+      item.querySelector('button').addEventListener('click', () => {
+        if (linkId) linkArtistToMB(a, linkId);
+        else if (reqMode) requestArtist(a);
+        else addArtist(a);
+      });
       results.appendChild(item);
     });
   } catch (err) {
@@ -236,6 +259,22 @@ async function addArtist(a) {
     loadArtists();
   } catch (err) {
     toast('Failed to add artist: ' + err.message, 'error');
+  }
+}
+
+async function requestArtist(a) {
+  try {
+    await API.createRequest({
+      musicBrainzId: a.musicBrainzId,
+      artistName: a.artistName,
+      artistType: a.artistType || '',
+      disambiguation: a.disambiguation || '',
+      images: a.images || [],
+    });
+    toast(`Request submitted for ${a.artistName}`, 'success');
+    closeAddArtistModal();
+  } catch (err) {
+    toast('Failed to submit request: ' + err.message, 'error');
   }
 }
 

@@ -389,3 +389,45 @@ class ArtistLookup(BaseModel):
 
 class ArtistLink(BaseModel):
     musicBrainzId: str
+
+
+class ArtistRequestIn(BaseModel):
+    musicBrainzId: str | None = None
+    artistName: str
+    artistType: str = ""
+    disambiguation: str = ""
+    images: list[dict] = []
+
+
+class ArtistRequestUpdate(BaseModel):
+    status: str  # "approved" or "rejected"
+
+
+class ArtistRequestOut(BaseModel):
+    id: int
+    musicBrainzId: str | None
+    artistName: str
+    artistType: str
+    disambiguation: str
+    images: list[dict]
+    requestedBy: str
+    status: str
+    createdAt: str
+    reviewedBy: str | None
+    reviewedAt: str | None
+
+    @classmethod
+    def from_orm_request(cls, r) -> "ArtistRequestOut":
+        return cls(
+            id=r.id,
+            musicBrainzId=r.mb_artist_id,
+            artistName=r.artist_name,
+            artistType=r.artist_type or "",
+            disambiguation=r.disambiguation or "",
+            images=_parse_json_field(r.images) or [],
+            requestedBy=r.requested_by.username if r.requested_by else "unknown",
+            status=r.status,
+            createdAt=r.created_at.isoformat() if r.created_at else "",
+            reviewedBy=r.reviewed_by.username if r.reviewed_by else None,
+            reviewedAt=r.reviewed_at.isoformat() if r.reviewed_at else None,
+        )
