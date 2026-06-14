@@ -110,6 +110,12 @@ async function initApp() {
   }
 
   sidebar.style.display = '';
+
+  // Restore view-container if the login page replaced it
+  if (!document.getElementById('view-container')) {
+    mainContent.innerHTML = '<div id="view-container"></div>';
+  }
+
   const userChip = document.getElementById('sidebar-user-chip');
   if (userChip) {
     userChip.querySelector('.sidebar-username').textContent = auth.username;
