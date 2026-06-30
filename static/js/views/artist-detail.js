@@ -5,14 +5,14 @@ async function renderArtistDetailView(container, artistId) {
   _currentArtistId = artistId;
   container.innerHTML = '<div class="loading-center"><div class="spinner"></div></div>';
   try {
-    const [artist, albums] = await Promise.all([API.getArtist(artistId), API.getAlbums(artistId)]);
-    renderArtistPage(container, artist, albums);
+    const [artist, albums, profiles] = await Promise.all([API.getArtist(artistId), API.getAlbums(artistId), API.getQProfiles()]);
+    renderArtistPage(container, artist, albums, profiles);
   } catch (err) {
     container.innerHTML = `<p class="text-danger">Failed to load artist: ${err.message}</p>`;
   }
 }
 
-function renderArtistPage(container, artist, albums) {
+function renderArtistPage(container, artist, albums, profiles) {
   const stats = artist.statistics || {};
   const imgUrl = (artist.images || []).find(i => i.coverType === 'cover' || i.coverType === 'poster')?.remoteUrl;
   container.innerHTML = `
@@ -33,6 +33,7 @@ function renderArtistPage(container, artist, albums) {
           ${isAdmin() ? '<button class="btn btn-primary btn-sm" id="btn-search-all">Search All Missing</button>' : ''}
           ${isAdmin() ? '<button class="btn btn-secondary btn-sm" id="btn-refresh-artist">Refresh</button>' : ''}
           ${isAdmin() ? `<span style="display:inline-flex;align-items:center;gap:6px"><label class="toggle" title="Monitored"><input type="checkbox" id="toggle-artist-monitored" ${artist.monitored ? 'checked' : ''} /><span class="toggle-slider"></span></label><span class="text-muted" style="font-size:12px">Monitored</span></span>` : ''}
+          ${isAdmin() && profiles && profiles.length ? `<span style="display:inline-flex;align-items:center;gap:6px"><span class="text-muted" style="font-size:12px">Quality:</span><select id="select-quality-profile" class="form-input" style="padding:3px 8px;font-size:12px;height:auto">${profiles.map(p => `<option value="${p.id}"${p.id === artist.qualityProfileId ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}</select></span>` : ''}
           <span style="flex:1"></span>
           ${isAdmin() ? '<button class="btn btn-secondary btn-sm" id="btn-link-artist">Link to MusicBrainz</button>' : ''}
           ${isAdmin() ? '<button class="btn btn-danger btn-sm" id="btn-delete-artist">Delete Artist</button>' : ''}
@@ -47,6 +48,16 @@ function renderArtistPage(container, artist, albums) {
     document.getElementById('toggle-artist-monitored').addEventListener('change', async function() {
       await API.updateArtist(artist.id, { monitored: this.checked }).catch(e => toast(e.message, 'error'));
     });
+    const qpSelect = document.getElementById('select-quality-profile');
+    if (qpSelect) {
+      qpSelect.addEventListener('change', async function() {
+        try {
+          await API.updateArtist(artist.id, { qualityProfileId: parseInt(this.value, 10) });
+          const name = this.options[this.selectedIndex].text;
+          toast(`Quality profile set to "${name}"`, 'success');
+        } catch (e) { toast(e.message, 'error'); }
+      });
+    }
     document.getElementById('btn-search-all').addEventListener('click', async () => {
       try { await API.searchArtistMissing(artist.id); toast('Searching for all missing tracks…', 'info'); }
       catch (e) { toast(e.message, 'error'); }
