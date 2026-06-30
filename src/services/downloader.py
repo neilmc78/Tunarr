@@ -130,13 +130,9 @@ async def download_track(
     native_mode = (quality_id == 8)
 
     if native_mode:
-        # Prefer M4A (AAC/MP4 — universally Plex-compatible).
-        # If only WebM is available, remux it to OGG/Opus — same audio, no
-        # re-encoding, and OGG is supported by Plex and all major music players.
-        postprocessors = [
-            {"key": "FFmpegVideoRemuxer", "preferedformat": "ogg"},
-            {"key": "FFmpegMetadata", "add_metadata": True},
-        ]
+        # Prefer M4A (AAC in MP4 — universally Plex-compatible).
+        # WebM fallback is handled after download via _remux_webm_to_ogg().
+        postprocessors = [{"key": "FFmpegMetadata", "add_metadata": True}]
         format_selector = "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio"
     else:
         audio_format = QUALITY_TO_FORMAT.get(quality_id, "mp3")
@@ -200,7 +196,26 @@ async def download_track(
                 result["duration"] = int((info.get("duration") or 0) * 1000)
 
     await asyncio.to_thread(_download)
+
+    # Best Native: if yt-dlp fell back to WebM, remux to OGG/Opus (lossless
+    # container swap — ffmpeg -c:a copy). WebM is not supported by Plex.
+    if native_mode and result.get("path", "").endswith(".webm"):
+        result["path"] = await asyncio.to_thread(_remux_webm_to_ogg, result["path"])
+
     return result
+
+
+def _remux_webm_to_ogg(webm_path: str) -> str:
+    """Remux a WebM/Opus file to OGG container without re-encoding."""
+    import subprocess
+    ogg_path = webm_path[:-5] + ".ogg"
+    subprocess.run(
+        ["ffmpeg", "-i", webm_path, "-vn", "-c:a", "copy", ogg_path, "-y"],
+        capture_output=True,
+        check=True,
+    )
+    os.remove(webm_path)
+    return ogg_path
 
 
 def build_output_template(
