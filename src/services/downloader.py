@@ -130,8 +130,14 @@ async def download_track(
     native_mode = (quality_id == 8)
 
     if native_mode:
-        postprocessors = [{"key": "FFmpegMetadata", "add_metadata": True}]
-        format_selector = "bestaudio/best"
+        # Prefer M4A (AAC/MP4 — universally Plex-compatible).
+        # If only WebM is available, remux it to OGG/Opus — same audio, no
+        # re-encoding, and OGG is supported by Plex and all major music players.
+        postprocessors = [
+            {"key": "FFmpegVideoRemuxer", "preferedformat": "ogg"},
+            {"key": "FFmpegMetadata", "add_metadata": True},
+        ]
+        format_selector = "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio"
     else:
         audio_format = QUALITY_TO_FORMAT.get(quality_id, "mp3")
         audio_quality = QUALITY_TO_BITRATE.get(quality_id, "320")
@@ -170,7 +176,7 @@ async def download_track(
     result: dict[str, Any] = {}
 
     if native_mode:
-        ext_candidates = ["webm", "opus", "m4a", "mp4", "ogg"]
+        ext_candidates = ["m4a", "ogg", "opus", "webm", "mp4"]
     else:
         audio_format = QUALITY_TO_FORMAT.get(quality_id, "mp3")
         ext_candidates = [audio_format, "mp3", "flac", "aac", "m4a", "opus", "webm"]
