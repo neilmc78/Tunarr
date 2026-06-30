@@ -1,6 +1,8 @@
 let _selectMode = false;
 const _selectedIds = new Set();
 let _linkTargetArtistId = null;
+let _allArtists = [];
+let _qpMap = {};
 
 function renderArtistsView(container) {
   container.innerHTML = `
@@ -8,12 +10,18 @@ function renderArtistsView(container) {
       <h1 class="page-title">Artists</h1>
       <div class="artists-hdr-btns" id="artists-hdr-btns"></div>
     </div>
+    <div class="artist-filter-bar">
+      <input type="search" id="artist-filter-input" class="form-input" placeholder="Filter artists…" autocomplete="off" />
+    </div>
     <div id="artist-grid-wrap"><div class="loading-center"><div class="spinner"></div></div></div>
   `;
   _selectMode = false;
   _selectedIds.clear();
   _renderHdrBtns();
   loadArtists();
+  document.getElementById('artist-filter-input').addEventListener('input', function() {
+    _renderArtistGrid(this.value.trim().toLowerCase());
+  });
 }
 
 function _renderHdrBtns() {
@@ -58,8 +66,8 @@ function enterSelectMode() {
 function exitSelectMode() {
   _selectMode = false;
   _selectedIds.clear();
-  document.querySelectorAll('.artist-card.selected').forEach(c => c.classList.remove('selected'));
   document.querySelector('.artist-grid')?.classList.remove('select-mode');
+  document.querySelectorAll('.artist-card.selected').forEach(c => c.classList.remove('selected'));
   _renderHdrBtns();
 }
 
@@ -90,19 +98,36 @@ async function loadArtists() {
   const wrap = document.getElementById('artist-grid-wrap');
   if (!wrap) return;
   try {
-    const artists = await API.getArtists();
-    if (!artists || artists.length === 0) {
-      wrap.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🎤</div><div class="empty-state-title">No Artists Yet</div><p>Click "Add Artist" to start building your music library.</p></div>`;
-      return;
-    }
-    const grid = document.createElement('div');
-    grid.className = 'artist-grid' + (_selectMode ? ' select-mode' : '');
-    artists.forEach(a => grid.appendChild(buildArtistCard(a)));
-    wrap.innerHTML = '';
-    wrap.appendChild(grid);
+    const [artists, profiles] = await Promise.all([API.getArtists(), API.getQProfiles().catch(() => [])]);
+    _qpMap = {};
+    (profiles || []).forEach(p => { _qpMap[p.id] = p.name; });
+    _allArtists = (artists || []).slice().sort((a, b) => (a.artistName || '').localeCompare(b.artistName || ''));
+    const filterInput = document.getElementById('artist-filter-input');
+    _renderArtistGrid(filterInput ? filterInput.value.trim().toLowerCase() : '');
   } catch (err) {
     wrap.innerHTML = `<p class="text-danger">Failed to load artists: ${err.message}</p>`;
   }
+}
+
+function _renderArtistGrid(filter) {
+  const wrap = document.getElementById('artist-grid-wrap');
+  if (!wrap) return;
+  const visible = filter
+    ? _allArtists.filter(a => (a.artistName || '').toLowerCase().includes(filter))
+    : _allArtists;
+  if (_allArtists.length === 0) {
+    wrap.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🎤</div><div class="empty-state-title">No Artists Yet</div><p>Click "Add Artist" to start building your music library.</p></div>`;
+    return;
+  }
+  if (visible.length === 0) {
+    wrap.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-title">No matches</div><p>No artists match that filter.</p></div>`;
+    return;
+  }
+  const grid = document.createElement('div');
+  grid.className = 'artist-grid' + (_selectMode ? ' select-mode' : '');
+  visible.forEach(a => grid.appendChild(buildArtistCard(a)));
+  wrap.innerHTML = '';
+  wrap.appendChild(grid);
 }
 
 function buildArtistCard(artist) {
@@ -111,20 +136,23 @@ function buildArtistCard(artist) {
   card.dataset.artistId = artist.id;
   if (_selectedIds.has(artist.id)) card.classList.add('selected');
 
-  const stats  = artist.statistics || {};
-  const pct    = Math.round(stats.percentOfTracks || 0);
-  const imgUrl = (artist.images || []).find(i => i.coverType === 'poster' || i.coverType === 'cover')?.remoteUrl;
+  const stats   = artist.statistics || {};
+  const pct     = Math.round(stats.percentOfTracks || 0);
+  const imgUrl  = (artist.images || []).find(i => i.coverType === 'poster' || i.coverType === 'cover')?.remoteUrl;
+  const qpName  = _qpMap[artist.qualityProfileId] || null;
+  const monitored = artist.monitored;
 
   card.innerHTML = `
     <div class="artist-card-art">
       ${imgUrl
         ? `<img src="${imgUrl}" alt="${esc(artist.artistName)}" loading="lazy" onerror="this.style.display='none'" />`
         : `<span class="artist-card-placeholder">🎤</span>`}
+      <div class="artist-card-progress"><div class="artist-card-progress-bar" style="width:${pct}%"></div></div>
     </div>
     <div class="artist-card-info">
       <div class="artist-card-name" title="${esc(artist.artistName)}">${esc(artist.artistName)}</div>
-      <div class="artist-card-meta">${stats.albumCount || 0} albums · ${stats.trackFileCount || 0}/${stats.totalTrackCount || 0} tracks</div>
-      <div class="progress-wrap"><div class="progress-bar" style="width:${pct}%"></div></div>
+      <div class="artist-card-status ${monitored ? 'monitored' : 'unmonitored'}">${monitored ? 'Monitored' : 'Unmonitored'}</div>
+      ${qpName ? `<div class="artist-card-profile">${esc(qpName)}</div>` : ''}
     </div>
   `;
 
