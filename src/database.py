@@ -1,5 +1,5 @@
 from pathlib import Path
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from .config import settings
@@ -42,6 +42,16 @@ def get_db():
         db.close()
 
 
+def _run_migrations(engine):
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE quality_profiles ADD COLUMN extra_args TEXT DEFAULT ''"))
+            conn.commit()
+        except Exception:
+            pass  # Column already exists
+
+
 def init_db():
     from . import models  # noqa: F401
     Base.metadata.create_all(bind=engine)
+    _run_migrations(engine)
