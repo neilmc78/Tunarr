@@ -50,22 +50,23 @@ function renderSettingsBody(body, folders, profiles, status, qualityDefs, users)
       <div id="qprofile-list">
         ${profiles.length === 0 ? '<p class="text-muted">No profiles configured.</p>' : ''}
         ${profiles.map(p => `
-          <div class="qprofile-row" style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+          <div class="qprofile-row" style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
             <span style="font-weight:600;min-width:140px">${esc(p.name)}</span>
             <span class="badge" style="background:var(--accent-muted);color:var(--text)">${esc(qDefMap[p.cutoff] || String(p.cutoff))}</span>
             <span class="text-muted" style="font-size:13px">${p.upgradeAllowed ? '&#8679; upgrades on' : 'no upgrades'}</span>
+            ${p.extraArgs ? `<code style="font-size:11px;background:var(--bg-tertiary);padding:2px 6px;border-radius:4px;color:var(--text-muted)">${esc(p.extraArgs)}</code>` : ''}
             <button class="btn btn-sm btn-danger" style="margin-left:auto" onclick="deleteQProfile(${p.id}, '${esc(p.name)}')">Remove</button>
           </div>`).join('')}
       </div>
 
       <div id="new-qprofile-form" style="display:none;margin-top:14px;padding:14px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary)">
-        <div style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:10px;align-items:end">
+        <div style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:10px;align-items:end;margin-bottom:10px">
           <div>
             <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Profile name</label>
             <input type="text" class="form-input" id="qp-name" placeholder="e.g. FLAC Only" />
           </div>
           <div>
-            <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Minimum quality (cutoff)</label>
+            <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Quality (cutoff)</label>
             <select class="form-input" id="qp-cutoff" style="width:100%">${qDefOptions}</select>
           </div>
           <div style="padding-bottom:2px">
@@ -77,6 +78,10 @@ function renderSettingsBody(body, folders, profiles, status, qualityDefs, users)
             <button class="btn btn-primary btn-sm" id="btn-save-qprofile">Save</button>
             <button class="btn btn-secondary btn-sm" id="btn-cancel-qprofile">Cancel</button>
           </div>
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Extra yt-dlp args <span style="font-weight:400;opacity:.7">(optional — e.g. <code>--cookies-from-browser firefox</code>)</span></label>
+          <input type="text" class="form-input" id="qp-extra-args" placeholder="--cookies-from-browser firefox" style="width:100%;max-width:500px;font-family:monospace;font-size:13px" />
         </div>
       </div>
 
@@ -237,12 +242,13 @@ function cancelQProfileForm() {
 }
 
 async function saveQProfile() {
-  const name    = document.getElementById('qp-name').value.trim();
-  const cutoff  = parseInt(document.getElementById('qp-cutoff').value, 10);
-  const upgrade = document.getElementById('qp-upgrade').checked;
+  const name      = document.getElementById('qp-name').value.trim();
+  const cutoff    = parseInt(document.getElementById('qp-cutoff').value, 10);
+  const upgrade   = document.getElementById('qp-upgrade').checked;
+  const extraArgs = (document.getElementById('qp-extra-args')?.value || '').trim();
   if (!name) { toast('Profile name is required', 'error'); return; }
   try {
-    await API.addQProfile({ name, cutoff, upgradeAllowed: upgrade, items: [] });
+    await API.addQProfile({ name, cutoff, upgradeAllowed: upgrade, items: [], extraArgs });
     toast(`Profile "${name}" created`, 'success');
     renderSettingsView(document.getElementById('view-container'));
   } catch (e) { toast(e.message, 'error'); }

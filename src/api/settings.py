@@ -65,6 +65,7 @@ def create_quality_profile(body: QualityProfileIn, db: Session = Depends(get_db)
         upgrade_allowed=body.upgradeAllowed,
         cutoff=body.cutoff,
         items=json.dumps(body.items or QUALITY_DEFINITIONS),
+        extra_args=body.extraArgs or "",
     )
     db.add(qp)
     db.commit()
@@ -82,6 +83,7 @@ def update_quality_profile(profile_id: int, body: QualityProfileIn, db: Session 
     qp.upgrade_allowed = body.upgradeAllowed
     qp.cutoff = body.cutoff
     qp.items = json.dumps(body.items)
+    qp.extra_args = body.extraArgs or ""
     db.commit()
     db.refresh(qp)
     return QualityProfileOut.from_orm_profile(qp)

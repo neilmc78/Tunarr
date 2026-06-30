@@ -49,6 +49,12 @@ def _seed_quality_profiles():
             "items": QUALITY_DEFINITIONS,
         },
         {
+            "name": "Best Native",
+            "upgrade_allowed": False,
+            "cutoff": 8,
+            "items": [q for q in QUALITY_DEFINITIONS if q["id"] == 8],
+        },
+        {
             "name": "MP3 Standard",
             "upgrade_allowed": True,
             "cutoff": 3,

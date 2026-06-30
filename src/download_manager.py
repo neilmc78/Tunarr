@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .database import SessionLocal
-from .models import DownloadQueue, History, Track, Album, Artist
-from .services.downloader import download_track, build_output_template
+from .models import DownloadQueue, History, Track, Album, Artist, QualityProfile
+from .services.downloader import download_track, build_output_template, search_youtube_music
 from .services.importer import import_downloaded_file
 
 logger = logging.getLogger("tunarr.downloader")
@@ -69,6 +69,15 @@ async def _run_download(queue_id: int):
             year         = (album.release_date or "")[:4] if album else ""
             track_number = track.track_number   if track else "01"
             track_title  = track.title          if track else item.title
+
+            # Resolve quality profile → cutoff ID and extra args
+            quality_id = 3  # default: MP3-320
+            extra_args = ""
+            if artist.quality_profile_id:
+                profile = db.get(QualityProfile, artist.quality_profile_id)
+                if profile:
+                    quality_id = profile.cutoff
+                    extra_args = profile.extra_args or ""
         finally:
             db.close()
 
@@ -82,27 +91,19 @@ async def _run_download(queue_id: int):
             track_title=track_title,
         )
 
-        try:
-            result = await download_track(
-                url=source_url,
-                output_template=output_template,
-                quality_id=3,
-                progress_callback=_update_queue,
-                queue_id=queue_id,
-            )
-        except Exception as exc:
-            logger.exception("Download failed for queue id %s", queue_id)
+        result = await _attempt_download(
+            queue_id=queue_id,
+            source_url=source_url,
+            output_template=output_template,
+            quality_id=quality_id,
+            extra_args=extra_args,
+            artist_name=artist_name,
+            track_title=track_title,
+        )
+
+        if result is None:
+            # Both attempts failed — already marked failed inside _attempt_download
             _active_downloads.pop(queue_id, None)
-            db = SessionLocal()
-            try:
-                item = db.get(DownloadQueue, queue_id)
-                if item:
-                    item.status = "failed"
-                    item.error_message = str(exc)
-                    _add_history_failed(db, item)
-                    db.commit()
-            finally:
-                db.close()
             return
 
         # ── Phase 3: import result ───────────────────────────────────────────
@@ -139,6 +140,72 @@ async def _run_download(queue_id: int):
         finally:
             _active_downloads.pop(queue_id, None)
             db.close()
+
+
+async def _attempt_download(
+    queue_id: int,
+    source_url: str,
+    output_template: str,
+    quality_id: int,
+    extra_args: str,
+    artist_name: str,
+    track_title: str,
+) -> dict | None:
+    """Try the given URL; on failure search for an alternative and retry once."""
+    try:
+        return await download_track(
+            url=source_url,
+            output_template=output_template,
+            quality_id=quality_id,
+            extra_args=extra_args,
+            progress_callback=_update_queue,
+            queue_id=queue_id,
+        )
+    except Exception as first_exc:
+        logger.warning("Download failed for queue %s (%s): %s — trying fallback search",
+                       queue_id, source_url, first_exc)
+
+    # Search for an alternative source, skipping the URL that just failed
+    try:
+        query = f"{artist_name} - {track_title}"
+        results = await search_youtube_music(query, limit=5)
+        fallback_url = next(
+            (r["url"] for r in results if r["url"] and r["url"] != source_url),
+            None,
+        )
+    except Exception as search_exc:
+        logger.warning("Fallback search failed for queue %s: %s", queue_id, search_exc)
+        fallback_url = None
+
+    if fallback_url:
+        try:
+            logger.info("Retrying queue %s with fallback URL: %s", queue_id, fallback_url)
+            return await download_track(
+                url=fallback_url,
+                output_template=output_template,
+                quality_id=quality_id,
+                extra_args=extra_args,
+                progress_callback=_update_queue,
+                queue_id=queue_id,
+            )
+        except Exception as retry_exc:
+            error_msg = f"Both sources failed. Original: {first_exc}. Retry: {retry_exc}"
+            logger.error("Queue %s retry also failed: %s", queue_id, retry_exc)
+    else:
+        error_msg = f"Download failed and no fallback found: {first_exc}"
+
+    # Mark the queue item as failed
+    db = SessionLocal()
+    try:
+        item = db.get(DownloadQueue, queue_id)
+        if item:
+            item.status = "failed"
+            item.error_message = error_msg
+            _add_history_failed(db, item)
+            db.commit()
+    finally:
+        db.close()
+    return None
 
 
 def _add_history_failed(db: Session, item: DownloadQueue):

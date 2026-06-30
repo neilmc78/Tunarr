@@ -55,12 +55,21 @@ def _detect_quality(path: str) -> dict:
         codec = type(f).__name__.lower()
         if "flac" in codec:
             qid, qname = 6, "FLAC"
-        elif bitrate >= 300:
-            qid, qname = 3, "MP3-320"
-        elif bitrate >= 240:
-            qid, qname = 2, "MP3-256"
+        elif "opus" in codec:
+            qid, qname = 8, "Best Native (Opus/AAC)"
+        elif "ogg" in codec:
+            # Ogg Vorbis — treat as equivalent to AAC-256
+            qid, qname = 4, "AAC-256"
+        elif "mp4" in codec or "m4a" in codec or "aac" in codec:
+            qid, qname = (5, "AAC-320") if bitrate >= 300 else (4, "AAC-256")
         else:
-            qid, qname = 1, "MP3-128"
+            # MP3 or unknown — fall back to bitrate-based detection
+            if bitrate >= 300:
+                qid, qname = 3, "MP3-320"
+            elif bitrate >= 240:
+                qid, qname = 2, "MP3-256"
+            else:
+                qid, qname = 1, "MP3-128"
         return {"quality": {"id": qid, "name": qname}, "revision": {"version": 1, "real": 0}}
     except Exception:
         return {"quality": {"id": 0, "name": "Unknown"}}

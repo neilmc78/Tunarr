@@ -44,6 +44,7 @@ QUALITY_DEFINITIONS = [
     {"id": 5, "name": "AAC-320"},
     {"id": 6, "name": "FLAC"},
     {"id": 7, "name": "FLAC 24bit"},
+    {"id": 8, "name": "Best Native (Opus/AAC)"},
 ]
 
 class QualityProfileOut(BaseModel):
@@ -52,6 +53,7 @@ class QualityProfileOut(BaseModel):
     upgradeAllowed: bool
     cutoff: int
     items: list[dict]
+    extraArgs: str = ""
     model_config = {"from_attributes": True}
 
     @field_validator("items", mode="before")
@@ -67,6 +69,7 @@ class QualityProfileOut(BaseModel):
             upgradeAllowed=p.upgrade_allowed,
             cutoff=p.cutoff,
             items=p.items,
+            extraArgs=p.extra_args or "",
         )
 
 
@@ -75,6 +78,7 @@ class QualityProfileIn(BaseModel):
     upgradeAllowed: bool = True
     cutoff: int = 3
     items: list[dict] = []
+    extraArgs: str = ""
 
 
 class ArtistOut(BaseModel):

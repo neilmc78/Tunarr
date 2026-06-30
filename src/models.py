@@ -163,6 +163,7 @@ class QualityProfile(Base):
     upgrade_allowed = Column(Boolean, default=True)
     cutoff = Column(Integer, default=3)
     items = Column(_JsonColumn, default="[]")
+    extra_args = Column(String, default="")
 
 
 class AppConfig(Base):
