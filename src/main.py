@@ -1,11 +1,13 @@
+import hashlib
 import json
 import logging
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.requests import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -148,6 +150,20 @@ for r in [
     app.include_router(r)
 
 _static = Path(__file__).parent.parent / "static"
+
+
+def _asset_version() -> str:
+    """Return an 8-char hash derived from the newest mtime in the static tree."""
+    try:
+        newest = max(
+            (f.stat().st_mtime for f in _static.rglob("*") if f.is_file()),
+            default=0,
+        )
+        return hashlib.md5(str(int(newest)).encode()).hexdigest()[:8]
+    except Exception:
+        return "0"
+
+
 if _static.exists():
     app.mount("/assets", StaticFiles(directory=str(_static)), name="static")
 
@@ -158,4 +174,11 @@ if _static.exists():
             from fastapi import HTTPException
             raise HTTPException(404)
         index = _static / "index.html"
-        return FileResponse(str(index))
+        v = _asset_version()
+        html = index.read_text()
+        # Append ?v=<hash> to every /assets/ URL so browsers re-fetch after updates
+        html = re.sub(r'((?:href|src)="/assets/[^"]+)"', rf'\1?v={v}"', html)
+        return HTMLResponse(
+            content=html,
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
